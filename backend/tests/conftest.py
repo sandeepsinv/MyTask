@@ -1,8 +1,6 @@
 import os
 
 os.environ["JWT_SECRET"] = "test-secret-that-is-long-enough-for-hs256"
-os.environ["ADMIN_USERNAME"] = "admin"
-os.environ["ADMIN_PASSWORD"] = "admin123"
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +9,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.database import Base, get_db
-from app.main import app, seed_admin
+from app.main import app
+from scripts.create_admin import create_admin
 
 
 @pytest.fixture
@@ -20,7 +19,7 @@ def db_session():
     Base.metadata.create_all(engine)
     TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     with TestingSession() as s:
-        seed_admin(s)
+        create_admin(s, "admin", "admin123", "Administrator")
     yield TestingSession
     engine.dispose()
 

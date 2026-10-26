@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { RequireAdmin, RequireAuth } from './auth/AuthContext'
 import { AppShell } from './components/AppShell'
 import Achievements from './pages/Achievements'
+import AdminActivity from './pages/AdminActivity'
 import AdminMembers from './pages/AdminMembers'
 import Daily from './pages/Daily'
 import Home from './pages/Home'
@@ -33,6 +34,14 @@ export default function App() {
         <Route path="leaderboard" element={<Leaderboard />} />
         <Route path="achievements" element={<Achievements />} />
         <Route path="profile" element={<Profile />} />
+        <Route
+          path="admin/activity"
+          element={
+            <RequireAdmin>
+              <AdminActivity />
+            </RequireAdmin>
+          }
+        />
         <Route
           path="admin/members"
           element={

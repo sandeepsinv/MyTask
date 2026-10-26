@@ -3,6 +3,7 @@ import random
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 
+from ..activity import AuditDep, diff
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import User
 from ..schemas import PasswordReset, UserCreate, UserOut, UserPublic, UserUpdate
@@ -25,7 +26,7 @@ def admin_list_users(db: DB, _: AdminUser) -> list[User]:
 
 
 @router.post("/admin/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def create_user(body: UserCreate, db: DB, _: AdminUser) -> User:
+def create_user(body: UserCreate, db: DB, admin: AdminUser, audit: AuditDep) -> User:
     if db.scalar(select(User).where(User.username == body.username)):
         raise HTTPException(status.HTTP_409_CONFLICT, "That username is already taken")
     user = User(
@@ -38,9 +39,22 @@ def create_user(body: UserCreate, db: DB, _: AdminUser) -> User:
         avatar_color=random.choice(AVATAR_COLORS),
     )
     db.add(user)
+    db.flush()
+    audit.log(
+        admin,
+        "user.created",
+        f"Added {user.full_name} (@{user.username}) as {'an admin' if user.role == 'admin' else 'a member'}",
+        "user",
+        user.id,
+        username=user.username,
+        role=user.role,
+    )
     db.commit()
     db.refresh(user)
     return user
+
+
+USER_FIELDS = {"full_name": "name", "email": "email", "title": "title", "role": "role", "is_active": "active", "avatar_color": "colour"}
 
 
 def _active_admins(db: DB) -> int:
@@ -48,7 +62,7 @@ def _active_admins(db: DB) -> int:
 
 
 @router.patch("/admin/users/{user_id}", response_model=UserOut)
-def update_user(user_id: int, body: UserUpdate, db: DB, admin: AdminUser) -> User:
+def update_user(user_id: int, body: UserUpdate, db: DB, admin: AdminUser, audit: AuditDep) -> User:
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
@@ -62,17 +76,30 @@ def update_user(user_id: int, body: UserUpdate, db: DB, admin: AdminUser) -> Use
     if user.id == admin.id and data.get("is_active") is False:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot deactivate your own account")
 
+    before = {k: getattr(user, k) for k in USER_FIELDS}
     for key, value in data.items():
         setattr(user, key, value)
+    changes = diff(before, {k: getattr(user, k) for k in USER_FIELDS}, USER_FIELDS)
+    if changes:
+        if set(changes) == {"is_active"}:
+            action = "user.reactivated" if user.is_active else "user.deactivated"
+            summary = f"{'Reactivated' if user.is_active else 'Deactivated'} {user.full_name}"
+        elif set(changes) == {"role"}:
+            action, summary = "user.role_changed", f"Made {user.full_name} {'an admin' if user.role == 'admin' else 'a member'}"
+        else:
+            action = "user.updated"
+            summary = f"Edited {user.full_name}: " + ", ".join(USER_FIELDS[k] for k in changes)
+        audit.log(admin, action, summary, "user", user.id, username=user.username, changes=changes)
     db.commit()
     db.refresh(user)
     return user
 
 
 @router.post("/admin/users/{user_id}/reset-password", status_code=status.HTTP_204_NO_CONTENT)
-def reset_password(user_id: int, body: PasswordReset, db: DB, _: AdminUser) -> None:
+def reset_password(user_id: int, body: PasswordReset, db: DB, admin: AdminUser, audit: AuditDep) -> None:
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
     user.hashed_password = hash_password(body.new_password)
+    audit.log(admin, "user.password_reset", f"Reset {user.full_name}'s password", "user", user.id, username=user.username)
     db.commit()

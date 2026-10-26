@@ -1,7 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 import type {
   AchievementDef,
+  ActivityCategory,
+  ActivityPage,
+  ActivityPerson,
   AchievementStatus,
   EarnedRow,
   LeaderboardEntry,
@@ -98,6 +101,26 @@ export const useProject = (id: number) =>
 export const useUpdates = (filters: UpdateFilters, enabled = true) =>
   useQuery({ queryKey: keys.updates(filters), queryFn: () => get<UpdateEntry[]>('/updates', filters), enabled })
 
+export interface ActivityFilters {
+  user_id?: number
+  category?: ActivityCategory
+  from?: string
+  to?: string
+  q?: string
+}
+
+/** The admin activity log, newest first, loaded a page at a time. */
+export function useActivity(filters: ActivityFilters) {
+  return useInfiniteQuery({
+    queryKey: ['activity', filters],
+    queryFn: ({ pageParam }) => get<ActivityPage>('/admin/activity', { ...filters, before: pageParam, limit: 50 }),
+    initialPageParam: undefined as number | undefined,
+    getNextPageParam: (last) => last.next_before ?? undefined,
+  })
+}
+export const useActivityPeople = () =>
+  useQuery({ queryKey: ['activity', 'people'], queryFn: () => get<ActivityPerson[]>('/admin/activity/people') })
+
 export const useAchievementCatalog = () =>
   useQuery({ queryKey: ['achievements', 'catalog'], queryFn: () => get<AchievementDef[]>('/achievements'), staleTime: Infinity })
 export const useEarnedMatrix = () =>
@@ -108,7 +131,7 @@ function useInvalidateWork() {
   const qc = useQueryClient()
   return () =>
     Promise.all(
-      ['tasks', 'task', 'leaderboard', 'overview', 'stats-me', 'achievements', 'projects', 'project', 'updates'].map((k) =>
+      ['tasks', 'task', 'leaderboard', 'overview', 'stats-me', 'achievements', 'projects', 'project', 'updates', 'activity'].map((k) =>
         qc.invalidateQueries({ queryKey: [k] }),
       ),
     )
@@ -189,7 +212,7 @@ function useInvalidateUsers() {
   const qc = useQueryClient()
   return () =>
     Promise.all(
-      ['admin-users', 'members', 'leaderboard', 'overview', 'tasks'].map((k) => qc.invalidateQueries({ queryKey: [k] })),
+      ['admin-users', 'members', 'leaderboard', 'overview', 'tasks', 'activity'].map((k) => qc.invalidateQueries({ queryKey: [k] })),
     )
 }
 

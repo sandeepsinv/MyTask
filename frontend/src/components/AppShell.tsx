@@ -1,4 +1,4 @@
-import { Award, FolderKanban, Home, KanbanSquare, LogOut, Menu, Moon, NotebookPen, Sun, Trophy, Users, UserCog, X } from 'lucide-react'
+import { Activity, Award, FolderKanban, Home, KanbanSquare, LogOut, Menu, Moon, NotebookPen, Sun, Trophy, Users, UserCog, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth, useMe } from '../auth/AuthContext'
@@ -35,6 +35,7 @@ const TITLES: Record<string, string> = {
   '/achievements': 'Achievements',
   '/profile': 'Profile',
   '/admin/members': 'Members',
+  '/admin/activity': 'Activity log',
 }
 
 export function AppShell() {
@@ -76,6 +77,10 @@ export function AppShell() {
             <NavLink to="/admin/members" className="nav-item">
               <UserCog aria-hidden="true" />
               Members
+            </NavLink>
+            <NavLink to="/admin/activity" className="nav-item">
+              <Activity aria-hidden="true" />
+              Activity log
             </NavLink>
           </div>
         ) : null}

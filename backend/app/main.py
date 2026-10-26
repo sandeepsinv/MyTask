@@ -2,32 +2,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import Base, SessionLocal, engine
+from .database import Base, engine
 from .migrations import upgrade
-from .models import User
-from .routers import auth, leaderboard, projects, tasks, updates, users
-from .security import hash_password
-
-
-def seed_admin(db: Session) -> None:
-    """Create the first admin from settings if no admin exists yet."""
-    if db.scalar(select(User).where(User.role == "admin")):
-        return
-    settings = get_settings()
-    db.add(
-        User(
-            username=settings.admin_username.lower(),
-            full_name="Administrator",
-            role="admin",
-            hashed_password=hash_password(settings.admin_password),
-            avatar_color="#1f2937",
-        )
-    )
-    db.commit()
+from .routers import activity, auth, leaderboard, projects, tasks, updates, users
 
 
 def init_db() -> None:
@@ -39,8 +18,6 @@ def init_db() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
-    with SessionLocal() as db:
-        seed_admin(db)
     yield
 
 
@@ -53,7 +30,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for r in (auth.router, users.router, projects.router, tasks.router, updates.router, leaderboard.router):
+    for r in (auth.router, users.router, projects.router, tasks.router, updates.router, leaderboard.router, activity.router):
         app.include_router(r, prefix="/api")
 
     @app.get("/api/health", tags=["meta"])

@@ -16,18 +16,25 @@ const AuthContext = createContext<AuthState | null>(null)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const qc = useQueryClient()
   const [user, setUser] = useState<UserOut | null>(null)
-  const [loading, setLoading] = useState(() => tokenStore.get() != null)
+  // Only wait for /auth/me when there is a real token; an empty one would otherwise hang on a blank screen.
+  const [loading, setLoading] = useState(() => !!tokenStore.get())
 
-  const logout = useCallback(() => {
+  // Local sign-out: used when the session is already invalid.
+  const clearSession = useCallback(() => {
     tokenStore.set(null)
     setUser(null)
     qc.clear()
   }, [qc])
 
+  // User-initiated sign-out: record it in the activity log, then clear the session either way.
+  const logout = useCallback(() => {
+    api.post('/auth/logout').catch(() => {}).finally(clearSession)
+  }, [clearSession])
+
   useEffect(() => {
-    setUnauthorizedHandler(logout)
+    setUnauthorizedHandler(clearSession)
     return () => setUnauthorizedHandler(null)
-  }, [logout])
+  }, [clearSession])
 
   useEffect(() => {
     if (!tokenStore.get()) return

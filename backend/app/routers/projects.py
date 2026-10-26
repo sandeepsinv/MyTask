@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
+from ..activity import AuditDep, diff
 from ..deps import DB, CurrentUser
 from ..models import DailyUpdate, Project, Task, User
 from ..schemas import (
@@ -82,6 +83,9 @@ def _get(db: DB, project_id: int) -> Project:
     return project
 
 
+PROJECT_FIELDS = {"name": "name", "description": "description", "color": "colour", "status": "status"}
+
+
 def _require_editor(project: Project, user: User) -> None:
     if project.created_by_id != user.id and user.role != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the project's creator or an admin can change it")
@@ -99,12 +103,14 @@ def list_projects(db: DB, _: CurrentUser, state: Literal["active", "archived", "
 
 
 @router.post("", response_model=ProjectSummary, status_code=status.HTTP_201_CREATED)
-def create_project(body: ProjectCreate, db: DB, user: CurrentUser) -> dict:
+def create_project(body: ProjectCreate, db: DB, user: CurrentUser, audit: AuditDep) -> dict:
     name = body.name.strip()
     if db.scalar(select(Project).where(Project.name.ilike(name), Project.status == "active")):
         raise HTTPException(status.HTTP_409_CONFLICT, "There's already an active project with that name")
     project = Project(name=name, description=body.description.strip(), color=body.color, created_by_id=user.id)
     db.add(project)
+    db.flush()
+    audit.log(user, "project.created", f'Created project "{project.name}"', "project", project.id, name=project.name)
     db.commit()
     return summarize(_get(db, project.id))
 
@@ -117,9 +123,10 @@ def read_project(project_id: int, db: DB, _: CurrentUser) -> dict:
 
 
 @router.patch("/{project_id}", response_model=ProjectSummary)
-def update_project(project_id: int, body: ProjectUpdate, db: DB, user: CurrentUser) -> dict:
+def update_project(project_id: int, body: ProjectUpdate, db: DB, user: CurrentUser, audit: AuditDep) -> dict:
     project = _get(db, project_id)
     _require_editor(project, user)
+    before = {k: getattr(project, k) for k in PROJECT_FIELDS}
     data = body.model_dump(exclude_unset=True)
     if "name" in data:
         data["name"] = data["name"].strip()
@@ -127,15 +134,37 @@ def update_project(project_id: int, body: ProjectUpdate, db: DB, user: CurrentUs
         data["description"] = (data["description"] or "").strip()
     for key, value in data.items():
         setattr(project, key, value)
+    changes = diff(before, {k: getattr(project, k) for k in PROJECT_FIELDS}, PROJECT_FIELDS)
+    if changes:
+        name = f'"{project.name}"'
+        if set(changes) == {"status"}:
+            action, summary = (
+                ("project.archived", f"Archived project {name}")
+                if project.status == "archived"
+                else ("project.restored", f"Restored project {name}")
+            )
+        else:
+            action = "project.updated"
+            summary = f"Edited project {name}: " + ", ".join(PROJECT_FIELDS[k] for k in changes)
+        audit.log(user, action, summary, "project", project.id, name=project.name, changes=changes)
     db.commit()
     return summarize(_get(db, project_id))
 
 
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_project(project_id: int, db: DB, user: CurrentUser) -> None:
+def delete_project(project_id: int, db: DB, user: CurrentUser, audit: AuditDep) -> None:
     """Delete the project. Its tasks are kept and become unmapped."""
     project = _get(db, project_id)
     _require_editor(project, user)
+    audit.log(
+        user,
+        "project.deleted",
+        f'Deleted project "{project.name}"' + (f", unmapping {len(project.tasks)} task(s)" if project.tasks else ""),
+        "project",
+        project.id,
+        name=project.name,
+        tasks_unmapped=len(project.tasks),
+    )
     db.execute(update(Task).where(Task.project_id == project_id).values(project_id=None))
     db.delete(project)
     db.commit()

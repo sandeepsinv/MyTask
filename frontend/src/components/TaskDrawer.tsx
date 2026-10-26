@@ -8,6 +8,7 @@ import {
   useCreateTask,
   useDeleteTask,
   useDeleteUpdate,
+  useMembers,
   useProjects,
   useTask,
   useUpdateTask,
@@ -306,7 +307,7 @@ function TaskDetailBody({ task, canEdit, projects }: { task: TaskDetail; canEdit
 
       <h3 className="section-title">What was worked on</h3>
       {canEdit ? <PostUpdateForm taskId={task.id} /> : null}
-      <UpdateTimeline task={task} canEdit={canEdit} />
+      <UpdateTimeline task={task} />
     </>
   )
 }
@@ -364,8 +365,14 @@ export function PostUpdateForm({ taskId, onDone, autoFocus }: { taskId: number; 
   )
 }
 
-function UpdateTimeline({ task, canEdit }: { task: TaskDetail; canEdit: boolean }) {
+function UpdateTimeline({ task }: { task: TaskDetail }) {
+  const me = useMe()
   const del = useDeleteUpdate()
+  // Only whoever posted an update (or an admin) can delete it.
+  const canDelete = (authorId: number) => authorId === me.id || me.role === 'admin'
+  // Updates are usually by the task's owner; name the author when it's someone else.
+  const { data: members } = useMembers()
+  const authorName = (id: number) => (id === me.id ? 'you' : (members?.find((m) => m.id === id)?.full_name ?? 'a former member'))
   if (task.updates.length === 0) return <div className="empty">No updates on this task yet.</div>
   // Group by day, newest first (the API already orders them).
   const days: { date: string; items: TaskDetail['updates'] }[] = []
@@ -383,7 +390,8 @@ function UpdateTimeline({ task, canEdit }: { task: TaskDetail; canEdit: boolean 
             {d.items.map((u) => (
               <li key={u.id}>
                 <p>{u.note}</p>
-                {canEdit ? (
+                {u.user_id !== task.owner_id ? <span className="by">{authorName(u.user_id)}</span> : null}
+                {canDelete(u.user_id) ? (
                   <button
                     className="icon-btn"
                     aria-label={`Remove the update from ${fmtDay(u.date)}`}

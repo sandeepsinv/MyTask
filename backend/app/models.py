@@ -116,3 +116,21 @@ class UserAchievement(Base):
     awarded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     user: Mapped[User] = relationship(back_populates="achievements")
+
+
+class ActivityLog(Base):
+    """Who did what, and when. Written alongside each change; read by admins only."""
+
+    __tablename__ = "activity_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(String(40), index=True)  # e.g. task.created, auth.login_failed
+    entity_type: Mapped[str | None] = mapped_column(String(20), nullable=True, index=True)  # task, project, update, user
+    entity_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    summary: Mapped[str] = mapped_column(Text)
+    details: Mapped[str] = mapped_column(Text, default="")  # JSON, e.g. {"changes": {"status": ["todo", "done"]}}
+    ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+    user: Mapped[User | None] = relationship()

@@ -629,3 +629,37 @@ a.proj:hover { color: var(--text); }
 .quiet { display: flex; flex-wrap: wrap; gap: 8px 20px; }
 .quiet li { display: inline-flex; align-items: center; gap: 8px; }
 .card .cproj { margin-top: 6px; }
+.timeline ul li .by { flex: none; color: var(--muted); font-size: var(--fs-small); padding-top: 1px; }
+
+/* ---------- activity log ---------- */
+.log-day + .log-day { margin-top: 20px; }
+.log-day h3 { font-size: 13px; font-weight: 500; color: var(--muted); padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.log-row { display: grid; grid-template-columns: 52px 24px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px 0; border-top: 1px solid var(--rule); }
+.log-day ul .log-row:first-child { border-top: 0; }
+.log-row time { color: var(--muted); font-size: 13px; padding-top: 2px; font-variant-numeric: tabular-nums; }
+.log-row .lr-body p { line-height: 20px; }
+.log-row .lr-body b { font-weight: 600; }
+.log-row.failed .lr-body p span { color: var(--negative); }
+.lr-meta { display: flex; align-items: center; gap: 14px; margin-top: 4px; font-size: var(--fs-small); color: var(--muted); flex-wrap: wrap; }
+.lr-meta code { font: 12px/1 ui-monospace, SFMono-Regular, Consolas, monospace; color: var(--faint); }
+.lr-meta a:hover { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.lr-toggle { display: inline-flex; align-items: center; gap: 2px; font-weight: 400; color: var(--muted); font-size: var(--fs-small); }
+.lr-toggle svg { width: 14px; height: 14px; transition: transform var(--t-hover); }
+.lr-details { margin-top: 8px; padding: 10px 14px; background: var(--raised); border: 1px solid var(--border); border-radius: 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.lr-details div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; }
+.lr-details dt { color: var(--muted); }
+.lr-details dd { overflow-wrap: anywhere; white-space: pre-wrap; }
+.lr-details .old { color: var(--muted); text-decoration: line-through; }
+@media (max-width: 860px) { .log-row { grid-template-columns: 44px 24px minmax(0, 1fr); gap: 8px; } .lr-details div { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+.log-row { grid-template-columns: 68px 24px minmax(0, 1fr); }
+.log-row time { white-space: nowrap; }
+.segmented button { white-space: nowrap; }
+@media (max-width: 860px) {
+  .log-row { grid-template-columns: 60px 24px minmax(0, 1fr); }
+  /* Long tab rows scroll inside their own track instead of pushing the page sideways. */
+  .toolbar .segmented { max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+  .toolbar .segmented::-webkit-scrollbar { display: none; }
+  .toolbar .day-nav { flex: 1 1 100%; }
+  .toolbar .day-nav .input { flex: 1; width: auto; min-width: 0; }
+  .panel-head .meta { display: none; }
+}

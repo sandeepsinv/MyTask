@@ -3,7 +3,8 @@
     python -m scripts.seed_demo            # adds the demo team (skips people who already exist)
     python -m scripts.seed_demo --reset    # wipes the database first
 
-Every demo member's password is "demo1234".
+Every demo member's password is "demo1234". If the database has no admin yet, a demo admin
+(admin / demo1234) is added too.
 """
 
 import random
@@ -13,9 +14,10 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import select
 
 from app.database import Base, SessionLocal, engine
-from app.main import init_db, seed_admin
+from app.main import init_db
 from app.models import DailyUpdate, Project, Task, User
 from app.security import hash_password
+from scripts.create_admin import create_admin
 from app.services.achievements import evaluate_and_award
 
 PEOPLE = [
@@ -112,7 +114,9 @@ def main(reset: bool) -> None:
     today = date.today()
 
     with SessionLocal() as db:
-        seed_admin(db)
+        if not db.scalar(select(User).where(User.role == "admin")):
+            create_admin(db, "admin", "demo1234", "Demo Admin")
+            print("added demo admin: admin / demo1234")
         users: dict[str, User] = {}
         for username, name, title, color in PEOPLE:
             existing = db.scalar(select(User).where(User.username == username))

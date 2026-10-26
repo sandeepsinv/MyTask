@@ -196,3 +196,36 @@ export interface MyStats {
   updated_today: boolean
   breakdown: ScoreBreakdown
 }
+
+export type ActivityCategory = 'auth' | 'task' | 'update' | 'project' | 'user'
+
+export interface ActivityEntry {
+  id: number
+  user: UserPublic | null
+  action: string
+  entity_type: 'task' | 'project' | 'update' | 'user' | null
+  entity_id: number | null
+  summary: string
+  details: {
+    changes?: Record<string, [unknown, unknown]>
+    note?: string
+    task_id?: number
+    username?: string
+    [key: string]: unknown
+  }
+  ip: string | null
+  created_at: string
+}
+
+export interface ActivityPage {
+  items: ActivityEntry[]
+  next_before: number | null
+}
+
+export interface ActivityPerson {
+  user: UserPublic
+  actions_30d: number
+  last_activity: string | null
+  last_sign_in: string | null
+  failed_sign_ins_30d: number
+}

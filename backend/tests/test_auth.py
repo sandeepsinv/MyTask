@@ -1,4 +1,4 @@
-def test_admin_is_seeded_and_can_login(client, admin_headers):
+def test_admin_can_login(client, admin_headers):
     r = client.get("/api/auth/me", headers=admin_headers)
     assert r.status_code == 200
     assert r.json()["username"] == "admin"
@@ -44,3 +44,17 @@ def test_deactivated_user_cannot_login_or_use_token(client, admin_headers, alice
     assert r.status_code == 200
     assert client.get("/api/auth/me", headers=headers).status_code == 401
     assert client.post("/api/auth/login", data={"username": "alice", "password": "secret1"}).status_code == 403
+
+
+def test_create_admin_rejects_duplicates_and_short_passwords(db_session):
+    import pytest
+
+    from scripts.create_admin import create_admin
+
+    with db_session() as s:
+        with pytest.raises(ValueError):
+            create_admin(s, "admin", "whatever1", "Again")
+        with pytest.raises(ValueError):
+            create_admin(s, "second", "123", "Short")
+        user = create_admin(s, " Second.Admin ", "secret12", "Second Admin")
+        assert (user.username, user.role) == ("second.admin", "admin")

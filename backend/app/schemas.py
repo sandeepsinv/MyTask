@@ -300,3 +300,29 @@ class MyStats(BaseModel):
     unmapped_tasks: int
     updated_today: bool
     breakdown: ScoreBreakdown
+
+
+# ---------- activity log (admin) ----------
+class ActivityOut(BaseModel):
+    id: int
+    user: UserPublic | None
+    action: str
+    entity_type: str | None
+    entity_id: int | None
+    summary: str
+    details: dict
+    ip: str | None
+    created_at: datetime
+
+
+class ActivityPage(BaseModel):
+    items: list[ActivityOut]
+    next_before: int | None  # pass as `before` to load older entries
+
+
+class ActivityPerson(BaseModel):
+    user: UserPublic
+    actions_30d: int
+    last_activity: datetime | None
+    last_sign_in: datetime | None
+    failed_sign_ins_30d: int

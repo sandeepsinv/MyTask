@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import or_, select
 
+from ..activity import STATUS_LABEL, TASK_FIELDS, AuditDep, diff
 from ..deps import DB, CurrentUser
 from ..models import Project, Task, User, utcnow
 from ..queries import TASK_LOAD
@@ -96,7 +97,7 @@ def list_tasks(
 
 
 @router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
-def create_task(body: TaskCreate, db: DB, user: CurrentUser) -> Task:
+def create_task(body: TaskCreate, db: DB, user: CurrentUser, audit: AuditDep) -> Task:
     if body.start_date and body.due_date and body.due_date < body.start_date:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Due date cannot be before start date")
     _check_project(db, body.project_id)
@@ -104,6 +105,17 @@ def create_task(body: TaskCreate, db: DB, user: CurrentUser) -> Task:
     task = Task(**data, owner_id=user.id, tags=_tags(body.tags), status="todo")
     _apply_status(task, body.status)
     db.add(task)
+    db.flush()
+    project = db.get(Project, task.project_id) if task.project_id else None
+    audit.log(
+        user,
+        "task.created",
+        f'Created task "{task.title}"' + (f" in {project.name}" if project else ""),
+        "task",
+        task.id,
+        title=task.title,
+        project=project.name if project else None,
+    )
     db.commit()
     if task.status == "done" or task.project_id:
         evaluate_and_award(db, user)
@@ -116,9 +128,10 @@ def read_task(task_id: int, db: DB, _: CurrentUser) -> Task:
 
 
 @router.patch("/{task_id}", response_model=TaskOut)
-def update_task(task_id: int, body: TaskUpdate, db: DB, user: CurrentUser) -> Task:
+def update_task(task_id: int, body: TaskUpdate, db: DB, user: CurrentUser, audit: AuditDep) -> Task:
     task = get_task(db, task_id)
     require_owner(task, user)
+    before = {k: getattr(task, k) for k in TASK_FIELDS}
     data = body.model_dump(exclude_unset=True)
     new_status = data.pop("status", None)
     if "project_id" in data and data["project_id"] != task.project_id:
@@ -131,6 +144,9 @@ def update_task(task_id: int, body: TaskUpdate, db: DB, user: CurrentUser) -> Ta
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Due date cannot be before start date")
     if new_status:
         _apply_status(task, new_status)
+    changes = diff(before, {k: getattr(task, k) for k in TASK_FIELDS}, TASK_FIELDS)
+    if changes:
+        audit.log(user, *_describe_change(db, task, changes), "task", task.id, title=task.title, changes=changes)
     db.commit()
     evaluate_and_award(db, task.owner)
     db.expire_all()
@@ -138,8 +154,39 @@ def update_task(task_id: int, body: TaskUpdate, db: DB, user: CurrentUser) -> Ta
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(task_id: int, db: DB, user: CurrentUser) -> None:
+def delete_task(task_id: int, db: DB, user: CurrentUser, audit: AuditDep) -> None:
     task = get_task(db, task_id)
     require_owner(task, user)
+    audit.log(
+        user,
+        "task.deleted",
+        f'Deleted task "{task.title}"' + (f" (owned by {task.owner.full_name})" if task.owner_id != user.id else ""),
+        "task",
+        task.id,
+        title=task.title,
+        updates_removed=len(task.updates),
+    )
     db.delete(task)
     db.commit()
+
+
+def _describe_change(db: DB, task: Task, changes: dict) -> tuple[str, str]:
+    """(action, sentence) for a task edit; status and project moves get their own wording."""
+    title = f'"{task.title}"'
+    # Completing sets progress to 100% too, so a status change may carry a progress change.
+    if "status" in changes and set(changes) <= {"status", "progress_pct"}:
+        old, new = changes["status"]
+        if new == "done":
+            return "task.completed", f"Completed {title}"
+        return "task.status", f"Moved {title} from {STATUS_LABEL[old]} to {STATUS_LABEL[new]}"
+    if set(changes) == {"project_id"}:
+        old_id, new_id = changes["project_id"]
+        old = db.get(Project, old_id) if old_id else None
+        new = db.get(Project, new_id) if new_id else None
+        if new is None:
+            return "task.unmapped", f"Removed {title} from {old.name if old else 'its project'}"
+        if old is None:
+            return "task.mapped", f"Mapped {title} to {new.name}"
+        return "task.mapped", f"Moved {title} from {old.name} to {new.name}"
+    names = ", ".join(TASK_FIELDS[k] for k in changes)
+    return "task.updated", f"Edited {title}: {names}"

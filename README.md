@@ -48,13 +48,19 @@ cd backend
 python -m venv .venv
 # Windows: .venv\Scripts\activate     macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env                  # then edit JWT_SECRET and ADMIN_PASSWORD
+cp .env.example .env                  # then set JWT_SECRET
 uvicorn app.main:app --reload --port 8000
 ```
 
-On first start the backend creates `pulse.db` and an admin account from `ADMIN_USERNAME` / `ADMIN_PASSWORD`. The defaults are **admin / admin123**, so change them in `.env` before anyone else uses the app. The interactive API docs are at http://localhost:8000/docs.
+On first start the backend creates `pulse.db`. A brand-new database has no accounts, so create the first admin once (it asks for a username, name and password):
 
-Optional demo data: this adds six members, four projects, tasks and three weeks of daily updates. Every demo password is `demo1234`.
+```bash
+python -m scripts.create_admin
+```
+
+After that, admins add everyone else from **Members**. The interactive API docs are at http://localhost:8000/docs.
+
+Optional demo data: this adds six members, four projects, tasks and three weeks of daily updates. Every demo password is `demo1234`; if the database has no admin yet, a demo admin `admin` / `demo1234` is added too.
 
 ```bash
 python -m scripts.seed_demo            # add the demo team
@@ -111,11 +117,17 @@ Weekly and monthly boards count only the tasks finished and the days with update
 | Create projects | ✓ | ✓ |
 | Edit, archive or delete a project | if they created it | ✓ |
 | Create tasks, map them to projects, post updates on own tasks | ✓ | ✓ |
-| Edit / delete own tasks and updates | ✓ | ✓ |
-| Edit / delete anyone's tasks | | ✓ |
+| Edit / delete the tasks they created | ✓ | ✓ |
+| Delete the updates they posted | ✓ | ✓ |
+| Edit / delete anyone's tasks, updates and projects | | ✓ |
 | Add members, reset passwords, change roles, deactivate | | ✓ |
+| View the activity log | | ✓ |
 
-Deleting a project keeps its tasks; they become unmapped. The app always keeps at least one active admin, and an admin can't deactivate their own account. Deactivated members can't sign in. They are hidden from the board, but their history is kept.
+Deleting a project keeps its tasks; they become unmapped.
+
+## Activity log
+
+Admins have an **Activity log** page (Admin › Activity log) showing everything people did, newest first: sign-ins, sign-outs and failed sign-in attempts (with IP address), tasks created, edited, moved, completed and deleted (with each changed field's old and new value), updates posted and deleted, project changes, and admin actions on people. It can be filtered by person, kind of activity, date range and text, and a per-person table shows each member's actions and failed sign-ins over the last 30 days and when they last signed in. Entries are written in the same transaction as the change they describe, so the log can't miss or invent an action. The app always keeps at least one active admin, and an admin can't deactivate their own account. Deactivated members can't sign in. They are hidden from the board, but their history is kept.
 
 ## Configuration (`backend/.env`)
 
@@ -124,7 +136,6 @@ Deleting a project keeps its tasks; they become unmapped. The app always keeps a
 | `DATABASE_URL` | `sqlite:///./pulse.db` | Any SQLAlchemy URL. Postgres works with `psycopg` installed |
 | `JWT_SECRET` | dev value | **Set a long random string in production** |
 | `JWT_EXPIRE_MINUTES` | `720` | Session length |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | `admin` / `admin123` | Used only when no admin exists yet |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma separated |
 
 ## Database changes
