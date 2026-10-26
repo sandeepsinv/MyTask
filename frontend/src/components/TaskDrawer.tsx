@@ -3,24 +3,40 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useSearchParams } from 'react-router-dom'
 import { errorMessage } from '../api/client'
-import { useAddLog, useCreateTask, useDeleteLog, useDeleteTask, useTask, useUpdateTask } from '../api/hooks'
-import type { TaskDetail, TaskInput } from '../api/types'
+import {
+  useAddUpdate,
+  useCreateTask,
+  useDeleteTask,
+  useDeleteUpdate,
+  useProjects,
+  useTask,
+  useUpdateTask,
+} from '../api/hooks'
+import type { ProjectRef, TaskDetail, TaskInput } from '../api/types'
 import { useMe } from '../auth/AuthContext'
-import { dueLabel, fmtDay, fmtHours, isoDate } from '../lib/format'
+import { dueLabel, fmtDay, fmtDayLong, isoDate } from '../lib/format'
 import { TASK_FORM_ID, TaskForm } from './TaskForm'
 import { useToast } from './Toast'
-import { Drawer, ErrorLine, Person, PriorityMark, Progress, Skel, StatusPill } from './ui'
+import { Drawer, ErrorLine, Person, PriorityMark, ProjectChip, Progress, Skel, StatusPill } from './ui'
 
-/** Opens task drawers from the URL: ?task=12 shows a task, ?task=new creates one. */
+/** Opens task drawers from the URL: ?task=12 shows a task, ?task=new creates one (optionally in ?project=3). */
 export function useTaskDrawer() {
   const [params, setParams] = useSearchParams()
-  const open = (id: number | 'new') =>
+  const open = (id: number | 'new', opts: { projectId?: number } = {}) =>
     setParams((p) => {
       p.set('task', String(id))
       p.delete('edit')
+      if (opts.projectId) p.set('project', String(opts.projectId))
+      else p.delete('project')
       return p
     })
   return { open, current: params.get('task') }
+}
+
+/** Active projects as the small refs the task form needs. */
+function useProjectOptions(): ProjectRef[] {
+  const { data } = useProjects('active')
+  return (data ?? []).map(({ id, name, color, status }) => ({ id, name, color, status }))
 }
 
 export function TaskDrawerHost() {
@@ -31,16 +47,22 @@ export function TaskDrawerHost() {
     setParams((p) => {
       p.delete('task')
       p.delete('edit')
+      p.delete('project')
       return p
     })
-  if (value === 'new') return <NewTaskDrawer onClose={close} />
+  if (value === 'new') {
+    const projectId = Number(params.get('project')) || null
+    return <NewTaskDrawer onClose={close} projectId={projectId} />
+  }
   const id = Number(value)
   if (!Number.isInteger(id)) return null
   return <TaskDetailDrawer key={id} id={id} onClose={close} startEditing={params.get('edit') === '1'} />
 }
 
-function NewTaskDrawer({ onClose }: { onClose: () => void }) {
+function NewTaskDrawer({ onClose, projectId }: { onClose: () => void; projectId: number | null }) {
   const create = useCreateTask()
+  const projects = useProjects('active')
+  const options = useProjectOptions()
   const toast = useToast()
   const submit = (input: TaskInput) =>
     create.mutate(input, {
@@ -64,7 +86,16 @@ function NewTaskDrawer({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-      <TaskForm onSubmit={submit} error={create.isError ? errorMessage(create.error) : null} />
+      {projects.isLoading ? (
+        <Skel w="100%" h={200} />
+      ) : (
+        <TaskForm
+          projects={options}
+          defaultProjectId={projectId}
+          onSubmit={submit}
+          error={create.isError ? errorMessage(create.error) : null}
+        />
+      )}
     </Drawer>
   )
 }
@@ -72,6 +103,7 @@ function NewTaskDrawer({ onClose }: { onClose: () => void }) {
 function TaskDetailDrawer({ id, onClose, startEditing }: { id: number; onClose: () => void; startEditing: boolean }) {
   const me = useMe()
   const { data: task, isLoading, isError, refetch } = useTask(id)
+  const options = useProjectOptions()
   const update = useUpdateTask()
   const remove = useDeleteTask()
   const toast = useToast()
@@ -106,7 +138,7 @@ function TaskDetailDrawer({ id, onClose, startEditing }: { id: number; onClose: 
           </>
         }
       >
-        <TaskForm task={task} onSubmit={submit} error={update.isError ? errorMessage(update.error) : null} />
+        <TaskForm task={task} projects={options} onSubmit={submit} error={update.isError ? errorMessage(update.error) : null} />
       </Drawer>
     )
   }
@@ -115,7 +147,7 @@ function TaskDetailDrawer({ id, onClose, startEditing }: { id: number; onClose: 
     confirmDelete ? (
       <>
         <span className="muted" style={{ marginRight: 'auto', alignSelf: 'center' }}>
-          Delete “{task.title}” and its logged hours?
+          Delete “{task.title}” and its updates?
         </span>
         <button className="btn ghost" onClick={() => setConfirmDelete(false)}>
           Keep
@@ -162,15 +194,48 @@ function TaskDetailDrawer({ id, onClose, startEditing }: { id: number; onClose: 
       ) : isError || !task ? (
         <ErrorLine what="this task" onRetry={() => refetch()} />
       ) : (
-        <TaskDetailBody task={task} canEdit={canEdit} />
+        <TaskDetailBody task={task} canEdit={canEdit} projects={options} />
       )}
     </Drawer>
   )
 }
 
-function TaskDetailBody({ task, canEdit }: { task: TaskDetail; canEdit: boolean }) {
-  const est = task.estimated_hours
-  const over = est != null && task.hours_logged > est
+/** Map, move or unmap a task without opening the full edit form. */
+export function ProjectPicker({ task, projects }: { task: { id: number; project: ProjectRef | null }; projects: ProjectRef[] }) {
+  const update = useUpdateTask()
+  const toast = useToast()
+  const options =
+    task.project && !projects.some((p) => p.id === task.project!.id) ? [task.project, ...projects] : projects
+  return (
+    <select
+      className="select inline-select"
+      value={task.project?.id ?? ''}
+      disabled={update.isPending}
+      aria-label="Project"
+      onClick={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        const value = e.target.value === '' ? null : Number(e.target.value)
+        const name = options.find((p) => p.id === value)?.name
+        update.mutate(
+          { id: task.id, project_id: value },
+          {
+            onSuccess: () => toast(name ? `Moved to ${name}` : 'Removed from its project'),
+            onError: (err) => toast(errorMessage(err)),
+          },
+        )
+      }}
+    >
+      <option value="">No project</option>
+      {options.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function TaskDetailBody({ task, canEdit, projects }: { task: TaskDetail; canEdit: boolean; projects: ProjectRef[] }) {
   return (
     <>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 20 }}>
@@ -189,13 +254,12 @@ function TaskDetailBody({ task, canEdit }: { task: TaskDetail; canEdit: boolean 
         <Progress value={task.progress_pct} accent />
       </div>
 
+      <div className="project-row">
+        <span className="muted">Project</span>
+        {canEdit ? <ProjectPicker task={task} projects={projects} /> : <ProjectChip project={task.project} />}
+      </div>
+
       <dl className="facts">
-        <div>
-          <dt>Logged</dt>
-          <dd>
-            {fmtHours(task.hours_logged)} h{est != null ? <span className="muted"> of {fmtHours(est)} h</span> : null}
-          </dd>
-        </div>
         <div>
           <dt>Due</dt>
           <dd className={task.is_overdue ? 'overdue' : ''}>
@@ -210,12 +274,11 @@ function TaskDetailBody({ task, canEdit }: { task: TaskDetail; canEdit: boolean 
           <dt>Finished</dt>
           <dd>{task.completed_at ? fmtDay(task.completed_at) : <span className="dash">—</span>}</dd>
         </div>
+        <div>
+          <dt>Updates</dt>
+          <dd>{task.updates.length}</dd>
+        </div>
       </dl>
-      {over ? (
-        <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
-          {fmtHours(task.hours_logged - (est ?? 0))} h over the estimate.
-        </p>
-      ) : null}
 
       {task.pending_notes ? (
         <>
@@ -241,98 +304,99 @@ function TaskDetailBody({ task, canEdit }: { task: TaskDetail; canEdit: boolean 
         </div>
       ) : null}
 
-      <h3 className="section-title">
-        Time logged <span className="muted num" style={{ fontWeight: 400 }}>{fmtHours(task.hours_logged)} h</span>
-      </h3>
-      {canEdit ? <LogHoursForm taskId={task.id} /> : null}
-      <WorkLogList task={task} canEdit={canEdit} />
+      <h3 className="section-title">What was worked on</h3>
+      {canEdit ? <PostUpdateForm taskId={task.id} /> : null}
+      <UpdateTimeline task={task} canEdit={canEdit} />
     </>
   )
 }
 
-interface LogValues {
+interface UpdateValues {
   date: string
-  hours: string
   note: string
 }
 
-export function LogHoursForm({ taskId, onDone }: { taskId: number; onDone?: () => void }) {
-  const add = useAddLog()
+/** "What did you work on?" — one note for one day. */
+export function PostUpdateForm({ taskId, onDone, autoFocus }: { taskId: number; onDone?: () => void; autoFocus?: boolean }) {
+  const add = useAddUpdate()
   const toast = useToast()
   const today = isoDate()
-  const { register, handleSubmit, reset, formState } = useForm<LogValues>({
-    defaultValues: { date: today, hours: '', note: '' },
-  })
-  const submit = (v: LogValues) =>
+  const { register, handleSubmit, reset, formState } = useForm<UpdateValues>({ defaultValues: { date: today, note: '' } })
+  const submit = (v: UpdateValues) =>
     add.mutate(
-      { taskId, date: v.date, hours: Number(v.hours), note: v.note.trim() },
+      { taskId, date: v.date, note: v.note.trim() },
       {
         onSuccess: () => {
-          toast(`Logged ${fmtHours(Number(v.hours))} h`)
-          reset({ date: v.date, hours: '', note: '' })
+          toast(v.date === today ? 'Update posted for today' : `Update posted for ${fmtDay(v.date)}`)
+          reset({ date: v.date, note: '' })
           onDone?.()
         },
       },
     )
   return (
-    <form onSubmit={handleSubmit(submit)} style={{ marginBottom: 12 }} noValidate>
-      <div className="log-form">
+    <form className="update-form" onSubmit={handleSubmit(submit)} noValidate>
+      <label className="field">
+        <span className="sr-only">What did you work on?</span>
+        <textarea
+          className="textarea"
+          rows={2}
+          autoFocus={autoFocus}
+          placeholder="What did you work on? e.g. Wrote the migration script and tested it on a copy of production"
+          aria-invalid={formState.errors.note ? 'true' : 'false'}
+          {...register('note', { validate: (v) => v.trim().length > 0 || 'Write what you worked on' })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSubmit(submit)()
+          }}
+        />
+      </label>
+      <div className="update-form-foot">
         <label className="field">
-          <span className="sr-only">Date</span>
+          <span className="sr-only">Day</span>
           <input type="date" className="input" max={today} {...register('date', { required: true })} />
         </label>
-        <label className="field">
-          <span className="sr-only">Hours</span>
-          <input
-            type="number"
-            className="input"
-            placeholder="Hours"
-            step={0.25}
-            min={0.25}
-            max={24}
-            aria-invalid={formState.errors.hours ? 'true' : 'false'}
-            {...register('hours', { validate: (v) => (Number(v) > 0 && Number(v) <= 24) || 'Between 0 and 24 hours' })}
-          />
-        </label>
-        <label className="field note">
-          <span className="sr-only">Note</span>
-          <input className="input" placeholder="What did you do?" {...register('note')} />
-        </label>
-        <button className="btn primary" type="submit" disabled={add.isPending} style={{ height: 40 }}>
-          Log
+        {formState.errors.note ? <span className="error">{formState.errors.note.message}</span> : <span />}
+        <button className="btn primary" type="submit" disabled={add.isPending}>
+          {add.isPending ? 'Posting…' : 'Post update'}
         </button>
       </div>
-      {formState.errors.hours ? <p className="error" style={{ color: 'var(--negative)', fontSize: 12, marginTop: 6 }}>{formState.errors.hours.message}</p> : null}
-      {add.isError ? <p className="form-error" style={{ marginTop: 8 }}>{errorMessage(add.error)}</p> : null}
+      {add.isError ? <p className="form-error">{errorMessage(add.error)}</p> : null}
     </form>
   )
 }
 
-function WorkLogList({ task, canEdit }: { task: TaskDetail; canEdit: boolean }) {
-  const del = useDeleteLog()
-  if (task.logs.length === 0) return <div className="empty">No time logged on this task yet.</div>
+function UpdateTimeline({ task, canEdit }: { task: TaskDetail; canEdit: boolean }) {
+  const del = useDeleteUpdate()
+  if (task.updates.length === 0) return <div className="empty">No updates on this task yet.</div>
+  // Group by day, newest first (the API already orders them).
+  const days: { date: string; items: TaskDetail['updates'] }[] = []
+  for (const u of task.updates) {
+    const last = days[days.length - 1]
+    if (last && last.date === u.date) last.items.push(u)
+    else days.push({ date: u.date, items: [u] })
+  }
   return (
-    <ul className="rows">
-      {task.logs.map((log) => (
-        <li key={log.id} className="row" style={{ minHeight: 44 }}>
-          <span className="num muted" style={{ width: 56, flex: 'none' }}>
-            {fmtDay(log.date)}
-          </span>
-          <span className="grow" style={{ minWidth: 0 }}>
-            {log.note ? log.note : <span className="dash">—</span>}
-          </span>
-          <span className="end">{fmtHours(log.hours)} h</span>
-          {canEdit ? (
-            <button
-              className="icon-btn"
-              aria-label={`Remove ${fmtHours(log.hours)} h on ${fmtDay(log.date)}`}
-              onClick={() => del.mutate({ taskId: task.id, logId: log.id })}
-            >
-              <Trash2 />
-            </button>
-          ) : null}
+    <ol className="timeline">
+      {days.map((d) => (
+        <li key={d.date}>
+          <time dateTime={d.date}>{fmtDayLong(d.date)}</time>
+          <ul>
+            {d.items.map((u) => (
+              <li key={u.id}>
+                <p>{u.note}</p>
+                {canEdit ? (
+                  <button
+                    className="icon-btn"
+                    aria-label={`Remove the update from ${fmtDay(u.date)}`}
+                    onClick={() => del.mutate({ taskId: task.id, updateId: u.id })}
+                  >
+                    <Trash2 />
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
         </li>
       ))}
-    </ul>
+    </ol>
   )
 }

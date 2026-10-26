@@ -4,7 +4,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
     String,
@@ -40,11 +39,27 @@ class User(Base):
     )
 
 
+class Project(Base):
+    __tablename__ = "projects"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(120))
+    description: Mapped[str] = mapped_column(Text, default="")
+    color: Mapped[str] = mapped_column(String(20), default="#1b6e66")
+    status: Mapped[str] = mapped_column(String(20), default="active", index=True)  # active | archived
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+    created_by: Mapped[User] = relationship()
+    tasks: Mapped[list["Task"]] = relationship(back_populates="project")
+
+
 class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("projects.id"), nullable=True, index=True)
     title: Mapped[str] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(20), default="todo", index=True)
@@ -52,7 +67,6 @@ class Task(Base):
     start_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-    estimated_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
     progress_pct: Mapped[int] = mapped_column(Integer, default=0)
     pending_notes: Mapped[str] = mapped_column(Text, default="")
     tags: Mapped[str] = mapped_column(String(255), default="")
@@ -60,31 +74,35 @@ class Task(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     owner: Mapped[User] = relationship(back_populates="tasks")
-    logs: Mapped[list["WorkLog"]] = relationship(
-        back_populates="task", cascade="all, delete-orphan", order_by="WorkLog.date.desc()"
+    project: Mapped[Project | None] = relationship(back_populates="tasks")
+    updates: Mapped[list["DailyUpdate"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="(DailyUpdate.date.desc(), DailyUpdate.id.desc())",
     )
-
-    @property
-    def hours_logged(self) -> float:
-        return round(sum(log.hours for log in self.logs), 2)
 
     @property
     def is_overdue(self) -> bool:
         return self.status != "done" and self.due_date is not None and self.due_date < date.today()
 
+    @property
+    def last_update(self) -> "DailyUpdate | None":
+        return self.updates[0] if self.updates else None
 
-class WorkLog(Base):
-    __tablename__ = "work_logs"
+
+class DailyUpdate(Base):
+    """What someone worked on, on one day, for one task."""
+
+    __tablename__ = "daily_updates"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     date: Mapped[date] = mapped_column(Date, index=True)
-    hours: Mapped[float] = mapped_column(Float)
-    note: Mapped[str] = mapped_column(Text, default="")
+    note: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
-    task: Mapped[Task] = relationship(back_populates="logs")
+    task: Mapped[Task] = relationship(back_populates="updates")
     user: Mapped[User] = relationship()
 
 

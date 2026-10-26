@@ -4,7 +4,7 @@ import { useLeaderboard } from '../api/hooks'
 import type { LeaderboardEntry, Period, ScoreBreakdown } from '../api/types'
 import { useMe } from '../auth/AuthContext'
 import { Avatar, Empty, ErrorLine, Person, Skel } from '../components/ui'
-import { firstName, fmtHours, fmtInt } from '../lib/format'
+import { firstName, fmtInt, plural } from '../lib/format'
 
 const PERIODS: { id: Period; label: string }[] = [
   { id: 'week', label: 'This week' },
@@ -16,7 +16,7 @@ const PERIODS: { id: Period; label: string }[] = [
 const PARTS: { key: keyof ScoreBreakdown; label: string; color: string }[] = [
   { key: 'tasks', label: 'Tasks', color: 'var(--accent)' },
   { key: 'on_time', label: 'On time', color: 'color-mix(in srgb, var(--accent) 65%, var(--ground))' },
-  { key: 'hours', label: 'Hours', color: 'color-mix(in srgb, var(--accent) 40%, var(--ground))' },
+  { key: 'updates', label: 'Daily updates', color: 'color-mix(in srgb, var(--accent) 40%, var(--ground))' },
   { key: 'streak', label: 'Streak', color: 'color-mix(in srgb, var(--accent) 22%, var(--ground))' },
   { key: 'achievements', label: 'Achievements', color: 'var(--text)' },
 ]
@@ -91,7 +91,7 @@ export default function Leaderboard() {
                     </th>
                     <th className="num">Score</th>
                     <th className="num hide-phone">Done</th>
-                    <th className="num hide-phone">Hours</th>
+                    <th className="num hide-phone">Days posted</th>
                     <th className="num hide-phone">Streak</th>
                     <th className="num hide-phone">Badges</th>
                   </tr>
@@ -110,7 +110,7 @@ export default function Leaderboard() {
                         {fmtInt(r.score)}
                       </td>
                       <td className="num hide-phone">{fmtInt(r.tasks_completed)}</td>
-                      <td className="num hide-phone">{fmtHours(r.hours)} h</td>
+                      <td className="num hide-phone">{fmtInt(r.update_days)}</td>
                       <td className="num hide-phone">
                         {r.streak ? (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
@@ -156,7 +156,7 @@ function Podium({ rows }: { rows: LeaderboardEntry[] }) {
                 {r.user.full_name}
               </span>
               <span className="muted" style={{ fontSize: 12 }}>
-                {fmtInt(r.tasks_completed)} done · {fmtHours(r.hours)} h
+                {fmtInt(r.tasks_completed)} done · {plural(r.update_days, 'day')} posted
               </span>
             </span>
             <span className="pscore">
@@ -197,7 +197,7 @@ function HowScoring() {
         {[
           ['Finishing a task', '5 low · 10 medium · 20 high · 35 critical'],
           ['On or before the due date', '+5 per task'],
-          ['Hours logged', '2 per hour'],
+          ['A day with an update', '3 per day'],
           ['Daily streak', '3 per day in a row, up to 30'],
           ['Achievements', 'their points, on the all-time board'],
         ].map(([k, v]) => (

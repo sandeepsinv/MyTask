@@ -7,6 +7,7 @@ Role = Literal["admin", "member"]
 Status = Literal["todo", "in_progress", "blocked", "done"]
 Priority = Literal["low", "medium", "high", "critical"]
 Period = Literal["week", "month", "all"]
+ProjectStatus = Literal["active", "archived"]
 
 
 class ORM(BaseModel):
@@ -67,15 +68,77 @@ class PasswordReset(BaseModel):
     new_password: str = Field(min_length=6, max_length=128)
 
 
+# ---------- projects ----------
+class ProjectRef(ORM):
+    id: int
+    name: str
+    color: str
+    status: ProjectStatus
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    description: str = ""
+    color: str = Field(default="#1b6e66", pattern=r"^#[0-9a-fA-F]{6}$")
+
+
+class ProjectUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=120)
+    description: str | None = None
+    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    status: ProjectStatus | None = None
+
+
+# ---------- daily updates ----------
+class UpdateCreate(BaseModel):
+    date: date
+    note: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("note")
+    @classmethod
+    def not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Say what you worked on")
+        return v
+
+
+class UpdateOut(ORM):
+    id: int
+    task_id: int
+    user_id: int
+    date: date
+    note: str
+    created_at: datetime
+
+
+class TaskRef(ORM):
+    id: int
+    title: str
+    status: Status
+    project: ProjectRef | None
+
+
+class UpdateEntry(ORM):
+    """An update with who wrote it and which task (and project) it was about."""
+
+    id: int
+    date: date
+    note: str
+    created_at: datetime
+    user: UserPublic
+    task: TaskRef
+
+
 # ---------- tasks ----------
 class TaskBase(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str = ""
     status: Status = "todo"
     priority: Priority = "medium"
+    project_id: int | None = None
     start_date: date | None = None
     due_date: date | None = None
-    estimated_hours: float | None = Field(default=None, ge=0, le=10000)
     progress_pct: int = Field(default=0, ge=0, le=100)
     pending_notes: str = ""
     tags: list[str] = []
@@ -90,34 +153,20 @@ class TaskUpdate(BaseModel):
     description: str | None = None
     status: Status | None = None
     priority: Priority | None = None
+    project_id: int | None = None  # send null to unmap
     start_date: date | None = None
     due_date: date | None = None
-    estimated_hours: float | None = Field(default=None, ge=0, le=10000)
     progress_pct: int | None = Field(default=None, ge=0, le=100)
     pending_notes: str | None = None
     tags: list[str] | None = None
-
-
-class WorkLogCreate(BaseModel):
-    date: date
-    hours: float = Field(gt=0, le=24)
-    note: str = ""
-
-
-class WorkLogOut(ORM):
-    id: int
-    task_id: int
-    user_id: int
-    date: date
-    hours: float
-    note: str
-    created_at: datetime
 
 
 class TaskOut(ORM):
     id: int
     owner_id: int
     owner: UserPublic
+    project_id: int | None
+    project: ProjectRef | None
     title: str
     description: str
     status: Status
@@ -125,12 +174,11 @@ class TaskOut(ORM):
     start_date: date | None
     due_date: date | None
     completed_at: datetime | None
-    estimated_hours: float | None
     progress_pct: int
     pending_notes: str
     tags: list[str]
-    hours_logged: float
     is_overdue: bool
+    last_update: UpdateOut | None
     created_at: datetime
     updated_at: datetime
 
@@ -143,7 +191,34 @@ class TaskOut(ORM):
 
 
 class TaskDetail(TaskOut):
-    logs: list[WorkLogOut]
+    updates: list[UpdateOut]
+
+
+# ---------- project summaries ----------
+class ProjectMember(BaseModel):
+    user: UserPublic
+    open_tasks: int
+    last_update: UpdateEntry | None
+
+
+class ProjectSummary(BaseModel):
+    id: int
+    name: str
+    description: str
+    color: str
+    status: ProjectStatus
+    created_by: UserPublic
+    created_at: datetime
+    counts: dict[str, int]  # todo, in_progress, blocked, done
+    total_tasks: int
+    overdue: int
+    last_activity: date | None
+    members: list[ProjectMember]
+    recent_updates: list[UpdateEntry]
+
+
+class ProjectDetail(ProjectSummary):
+    tasks: list[TaskOut]
 
 
 # ---------- achievements ----------
@@ -178,7 +253,7 @@ class AwardedAchievement(BaseModel):
 class ScoreBreakdown(BaseModel):
     tasks: int
     on_time: int
-    hours: int
+    updates: int
     streak: int
     achievements: int
 
@@ -188,7 +263,7 @@ class LeaderboardEntry(BaseModel):
     user: UserPublic
     score: int
     tasks_completed: int
-    hours: float
+    update_days: int
     streak: int
     achievements: int
     breakdown: ScoreBreakdown
@@ -199,21 +274,18 @@ class MemberSnapshot(BaseModel):
     current_task: TaskOut | None
     open_tasks: int
     blocked_tasks: int
-    hours_this_week: float
-
-
-class DailyHours(BaseModel):
-    date: date
-    hours: float
+    latest_update: UpdateEntry | None
+    updated_today: bool
 
 
 class TeamOverview(BaseModel):
     status_counts: dict[str, int]
     overdue: int
-    hours_this_week: float
-    hours_last_week: float
     completed_this_week: int
-    daily_hours: list[DailyHours]
+    people: int
+    people_updated_today: int
+    updates_today: int
+    unmapped_open_tasks: int
     members: list[MemberSnapshot]
     recent_achievements: list[AwardedAchievement]
 
@@ -222,7 +294,9 @@ class MyStats(BaseModel):
     score: int
     rank: int
     streak: int
-    hours_this_week: float
+    update_days_this_week: int
     tasks_completed: int
     open_tasks: int
+    unmapped_tasks: int
+    updated_today: bool
     breakdown: ScoreBreakdown

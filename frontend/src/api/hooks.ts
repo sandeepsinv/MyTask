@@ -7,6 +7,10 @@ import type {
   LeaderboardEntry,
   MyStats,
   Period,
+  ProjectDetail,
+  ProjectInput,
+  ProjectStatus,
+  ProjectSummary,
   Role,
   Task,
   TaskDetail,
@@ -14,14 +18,26 @@ import type {
   TaskStatus,
   TeamOverview,
   UserOut,
+  Update,
+  UpdateEntry,
   UserPublic,
-  WorkLog,
 } from './types'
 
 export interface TaskFilters {
   owner_id?: number
+  project_id?: number
+  unmapped?: boolean
   status?: TaskStatus[]
   q?: string
+}
+
+export interface UpdateFilters {
+  on?: string
+  from?: string
+  to?: string
+  user_id?: number
+  project_id?: number
+  limit?: number
 }
 
 const get = <T,>(url: string, params?: object) => api.get<T>(url, { params }).then((r) => r.data)
@@ -35,6 +51,9 @@ export const keys = {
   overview: ['overview'] as const,
   me: ['stats-me'] as const,
   achievements: (userId: number) => ['achievements', userId] as const,
+  projects: (state: ProjectStatus | 'all') => ['projects', state] as const,
+  project: (id: number) => ['project', id] as const,
+  updates: (f: UpdateFilters) => ['updates', f] as const,
 }
 
 export function useTasks(filters: TaskFilters = {}) {
@@ -43,6 +62,8 @@ export function useTasks(filters: TaskFilters = {}) {
     queryFn: () =>
       get<Task[]>('/tasks', {
         owner_id: filters.owner_id,
+        project_id: filters.project_id,
+        unmapped: filters.unmapped || undefined,
         q: filters.q || undefined,
         status: filters.status,
       }),
@@ -70,6 +91,13 @@ export const useAchievements = (userId: number | undefined) =>
     enabled: userId != null,
   })
 
+export const useProjects = (state: ProjectStatus | 'all' = 'active') =>
+  useQuery({ queryKey: keys.projects(state), queryFn: () => get<ProjectSummary[]>('/projects', { state }) })
+export const useProject = (id: number) =>
+  useQuery({ queryKey: keys.project(id), queryFn: () => get<ProjectDetail>(`/projects/${id}`) })
+export const useUpdates = (filters: UpdateFilters, enabled = true) =>
+  useQuery({ queryKey: keys.updates(filters), queryFn: () => get<UpdateEntry[]>('/updates', filters), enabled })
+
 export const useAchievementCatalog = () =>
   useQuery({ queryKey: ['achievements', 'catalog'], queryFn: () => get<AchievementDef[]>('/achievements'), staleTime: Infinity })
 export const useEarnedMatrix = () =>
@@ -80,7 +108,7 @@ function useInvalidateWork() {
   const qc = useQueryClient()
   return () =>
     Promise.all(
-      ['tasks', 'task', 'leaderboard', 'overview', 'stats-me', 'achievements'].map((k) =>
+      ['tasks', 'task', 'leaderboard', 'overview', 'stats-me', 'achievements', 'projects', 'project', 'updates'].map((k) =>
         qc.invalidateQueries({ queryKey: [k] }),
       ),
     )
@@ -108,21 +136,44 @@ export function useDeleteTask() {
   return useMutation({ mutationFn: (id: number) => api.delete(`/tasks/${id}`), onSuccess: invalidate })
 }
 
-export function useAddLog() {
+export function useAddUpdate() {
   const invalidate = useInvalidateWork()
   return useMutation({
-    mutationFn: ({ taskId, ...body }: { taskId: number; date: string; hours: number; note: string }) =>
-      api.post<WorkLog>(`/tasks/${taskId}/logs`, body).then((r) => r.data),
+    mutationFn: ({ taskId, ...body }: { taskId: number; date: string; note: string }) =>
+      api.post<Update>(`/tasks/${taskId}/updates`, body).then((r) => r.data),
     onSuccess: invalidate,
   })
 }
 
-export function useDeleteLog() {
+export function useDeleteUpdate() {
   const invalidate = useInvalidateWork()
   return useMutation({
-    mutationFn: ({ taskId, logId }: { taskId: number; logId: number }) => api.delete(`/tasks/${taskId}/logs/${logId}`),
+    mutationFn: ({ taskId, updateId }: { taskId: number; updateId: number }) =>
+      api.delete(`/tasks/${taskId}/updates/${updateId}`),
     onSuccess: invalidate,
   })
+}
+
+export function useCreateProject() {
+  const invalidate = useInvalidateWork()
+  return useMutation({
+    mutationFn: (body: ProjectInput) => api.post<ProjectSummary>('/projects', body).then((r) => r.data),
+    onSuccess: invalidate,
+  })
+}
+
+export function useUpdateProject() {
+  const invalidate = useInvalidateWork()
+  return useMutation({
+    mutationFn: ({ id, ...body }: Partial<ProjectInput> & { status?: ProjectStatus; id: number }) =>
+      api.patch<ProjectSummary>(`/projects/${id}`, body).then((r) => r.data),
+    onSuccess: invalidate,
+  })
+}
+
+export function useDeleteProject() {
+  const invalidate = useInvalidateWork()
+  return useMutation({ mutationFn: (id: number) => api.delete(`/projects/${id}`), onSuccess: invalidate })
 }
 
 export interface NewUser {

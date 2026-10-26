@@ -4,7 +4,10 @@ import {
   Dumbbell,
   Flag,
   Flame,
+  FolderOpen,
+  Layers,
   ListChecks,
+  NotebookPen,
   Sunrise,
   Timer,
   Trophy,
@@ -13,7 +16,8 @@ import {
 } from 'lucide-react'
 import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import type { Priority, TaskStatus, UserPublic } from '../api/types'
+import { Link } from 'react-router-dom'
+import type { Priority, ProjectRef, TaskStatus, UserPublic } from '../api/types'
 import { initials } from '../lib/format'
 
 export const STATUS_LABEL: Record<TaskStatus, string> = {
@@ -94,11 +98,37 @@ const ACHIEVEMENT_ICONS: Record<string, LucideIcon> = {
   'calendar-check': CalendarCheck,
   'list-checks': ListChecks,
   flame: Flame,
+  layers: Layers,
+  'notebook-pen': NotebookPen,
   trophy: Trophy,
 }
 export function AchievementIcon({ name }: { name: string }) {
   const Icon = ACHIEVEMENT_ICONS[name] ?? Trophy
   return <Icon aria-hidden="true" />
+}
+
+/** A project's name with its colour dot; links to the project unless `plain`. Unmapped tasks say so. */
+export function ProjectChip({ project, plain }: { project: ProjectRef | null; plain?: boolean }) {
+  if (!project)
+    return (
+      <span className="proj none">
+        <FolderOpen aria-hidden="true" />
+        No project
+      </span>
+    )
+  const inner = (
+    <>
+      <i style={{ background: project.color }} aria-hidden="true" />
+      {project.name}
+    </>
+  )
+  return plain ? (
+    <span className="proj">{inner}</span>
+  ) : (
+    <Link className="proj" to={`/projects/${project.id}`} onClick={(e) => e.stopPropagation()}>
+      {inner}
+    </Link>
+  )
 }
 
 export function Empty({ children }: { children: ReactNode }) {

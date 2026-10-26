@@ -15,7 +15,8 @@ def test_create_task_sets_owner(client, alice):
     assert task["status"] == "todo"
     assert task["tags"] == ["frontend", "auth"]
     assert task["pending_notes"] == "Hook up API"
-    assert task["hours_logged"] == 0
+    assert task["project"] is None
+    assert task["last_update"] is None
 
 
 def test_everyone_sees_everyones_tasks(client, alice, bob):
@@ -35,7 +36,7 @@ def test_member_cannot_edit_or_delete_others_task(client, alice, bob):
     assert client.delete(f"/api/tasks/{task['id']}", headers=b_headers).status_code == 403
     assert (
         client.post(
-            f"/api/tasks/{task['id']}/logs", json={"date": str(date.today()), "hours": 1}, headers=b_headers
+            f"/api/tasks/{task['id']}/updates", json={"date": str(date.today()), "note": "Sneaky"}, headers=b_headers
         ).status_code
         == 403
     )

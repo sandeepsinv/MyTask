@@ -1,10 +1,10 @@
 import { Search } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useMembers, useOverview, useTasks } from '../api/hooks'
-import type { Task, TaskStatus, UserPublic } from '../api/types'
+import type { MemberSnapshot, Task, TaskStatus, UserPublic } from '../api/types'
 import { useTaskDrawer } from '../components/TaskDrawer'
-import { Empty, ErrorLine, Person, Progress, Skel, STATUSES, STATUS_LABEL, StatusPill } from '../components/ui'
-import { dueLabel, fmtHours, fmtInt, plural } from '../lib/format'
+import { Empty, ErrorLine, Person, ProjectChip, Progress, Skel, STATUSES, STATUS_LABEL, StatusPill } from '../components/ui'
+import { dueLabel, fmtDayLong, fmtInt, plural } from '../lib/format'
 import { TaskTable } from './MyWork'
 
 const OPEN: TaskStatus[] = ['in_progress', 'blocked', 'todo']
@@ -22,10 +22,7 @@ export default function Team() {
   })
   const ov = useOverview()
 
-  const hoursByUser = useMemo(
-    () => new Map(ov.data?.members.map((m) => [m.user.id, m.hours_this_week]) ?? []),
-    [ov.data],
-  )
+  const snapshots = useMemo(() => new Map(ov.data?.members.map((m) => [m.user.id, m]) ?? []), [ov.data])
 
   return (
     <>
@@ -91,7 +88,7 @@ export default function Team() {
         <People
           members={owner === '' ? members.data : members.data.filter((m) => m.id === owner)}
           tasks={tasks.data}
-          hours={hoursByUser}
+          snapshots={snapshots}
           filtered={q !== ''}
           onShowAll={(id) => {
             setOwner(id)
@@ -106,13 +103,13 @@ export default function Team() {
 function People({
   members,
   tasks,
-  hours,
+  snapshots,
   filtered,
   onShowAll,
 }: {
   members: UserPublic[]
   tasks: Task[]
-  hours: Map<number, number>
+  snapshots: Map<number, MemberSnapshot>
   filtered: boolean
   onShowAll: (userId: number) => void
 }) {
@@ -134,6 +131,7 @@ function People({
       {shown.map((m) => {
         const mine = [...(byOwner.get(m.id) ?? [])].sort((a, b) => rank[a.status] - rank[b.status])
         const visible = mine.slice(0, 3)
+        const latest = snapshots.get(m.id)?.latest_update
         return (
           <section className="panel member-card" key={m.id} aria-label={m.full_name}>
             <div className="mh">
@@ -147,7 +145,7 @@ function People({
                 <b>{fmtInt(mine.filter((t) => t.status === 'blocked').length)}</b> blocked
               </span>
               <span>
-                <b>{fmtHours(hours.get(m.id) ?? 0)} h</b> this week
+                last update <b>{latest ? fmtDayLong(latest.date).toLowerCase() : 'none'}</b>
               </span>
             </div>
             {visible.length === 0 ? (
@@ -178,11 +176,18 @@ function People({
                     </div>
                   ) : null}
                   <div className="mp">
-                    {t.pending_notes ? `Pending: ${t.pending_notes.split('\n')[0]}` : null}
-                    {!t.pending_notes && t.due_date ? (
+                    <ProjectChip project={t.project} plain />
+                  </div>
+                  <div className="mp">
+                    {t.last_update ? (
+                      `${fmtDayLong(t.last_update.date)}: ${t.last_update.note}`
+                    ) : t.pending_notes ? (
+                      `Pending: ${t.pending_notes.split('\n')[0]}`
+                    ) : t.due_date ? (
                       <span className={t.is_overdue ? 'overdue' : ''}>{dueLabel(t.due_date, t.status === 'done')}</span>
-                    ) : null}
-                    {!t.pending_notes && !t.due_date ? `${fmtHours(t.hours_logged)} h logged` : null}
+                    ) : (
+                      'No updates yet'
+                    )}
                   </div>
                 </a>
               ))

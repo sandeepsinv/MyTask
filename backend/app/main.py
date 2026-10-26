@@ -7,8 +7,9 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import Base, SessionLocal, engine
+from .migrations import upgrade
 from .models import User
-from .routers import auth, leaderboard, tasks, users
+from .routers import auth, leaderboard, projects, tasks, updates, users
 from .security import hash_password
 
 
@@ -29,9 +30,15 @@ def seed_admin(db: Session) -> None:
     db.commit()
 
 
+def init_db() -> None:
+    """Create missing tables, then apply in-place upgrades to existing ones."""
+    Base.metadata.create_all(bind=engine)
+    upgrade(engine)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(bind=engine)
+    init_db()
     with SessionLocal() as db:
         seed_admin(db)
     yield
@@ -46,7 +53,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    for r in (auth.router, users.router, tasks.router, leaderboard.router):
+    for r in (auth.router, users.router, projects.router, tasks.router, updates.router, leaderboard.router):
         app.include_router(r, prefix="/api")
 
     @app.get("/api/health", tags=["meta"])

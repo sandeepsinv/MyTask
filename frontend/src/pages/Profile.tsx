@@ -5,7 +5,7 @@ import { useChangePassword, useMyStats } from '../api/hooks'
 import { useMe } from '../auth/AuthContext'
 import { useToast } from '../components/Toast'
 import { Avatar, Skel } from '../components/ui'
-import { fmtHours, fmtInt } from '../lib/format'
+import { fmtInt } from '../lib/format'
 
 interface PwValues {
   current_password: string
@@ -61,7 +61,7 @@ export default function Profile() {
       <div className="kpis" style={{ marginBottom: 40 }}>
         {stat('All-time score', <>{fmtInt(stats?.score ?? 0)} <span className="unit">#{stats?.rank}</span></>)}
         {stat('Tasks finished', fmtInt(stats?.tasks_completed ?? 0))}
-        {stat('This week', <>{fmtHours(stats?.hours_this_week ?? 0)}<span className="unit">h</span></>)}
+        {stat('Days with an update this week', <>{fmtInt(stats?.update_days_this_week ?? 0)}<span className="unit">of 7</span></>)}
         {stat('Current streak', <>{fmtInt(stats?.streak ?? 0)}<span className="unit">{stats?.streak === 1 ? 'day' : 'days'}</span></>)}
       </div>
 

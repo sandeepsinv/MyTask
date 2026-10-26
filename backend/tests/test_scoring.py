@@ -2,7 +2,7 @@ from datetime import date, datetime, timedelta
 
 from app.services.scoring import (
     CompletedTask,
-    LogEntry,
+    UpdateEntry,
     compute_metrics,
     compute_score,
     current_streak,
@@ -31,7 +31,7 @@ def test_current_streak_counts_back_from_today():
     assert current_streak([TODAY, days_ago(1), days_ago(2), days_ago(4)], TODAY) == 3
 
 
-def test_current_streak_survives_until_today_is_logged():
+def test_current_streak_survives_until_today_is_posted():
     assert current_streak([days_ago(1), days_ago(2)], TODAY) == 2
 
 
@@ -52,28 +52,29 @@ def test_score_breakdown_all_time():
         CompletedTask("low", at(days_ago(1)), days_ago(3)),  # 5, late
         CompletedTask("critical", at(days_ago(40)), None),  # 35, no due date -> no bonus
     ]
-    logs = [LogEntry(TODAY, 2), LogEntry(days_ago(1), 1.5)]
-    score = compute_score(tasks, logs, achievement_points=25, period="all", today=TODAY)
+    # Two updates today count as one day.
+    updates = [UpdateEntry(TODAY), UpdateEntry(TODAY), UpdateEntry(days_ago(1))]
+    score = compute_score(tasks, updates, achievement_points=25, period="all", today=TODAY)
     b = score.breakdown
-    assert (b.tasks, b.on_time, b.hours, b.streak, b.achievements) == (60, 5, 7, 6, 25)
-    assert score.total == 103
+    assert (b.tasks, b.on_time, b.updates, b.streak, b.achievements) == (60, 5, 6, 6, 25)
+    assert score.total == 102
     assert score.tasks_completed == 3
-    assert score.hours == 3.5
+    assert score.update_days == 2
 
 
 def test_week_period_excludes_old_work_and_achievements():
     tasks = [CompletedTask("medium", at(days_ago(1)), None), CompletedTask("medium", at(days_ago(10)), None)]
-    logs = [LogEntry(days_ago(1), 4), LogEntry(days_ago(10), 8)]
-    score = compute_score(tasks, logs, achievement_points=100, period="week", today=TODAY)
+    updates = [UpdateEntry(days_ago(1)), UpdateEntry(days_ago(10))]
+    score = compute_score(tasks, updates, achievement_points=100, period="week", today=TODAY)
     assert score.tasks_completed == 1
-    assert score.hours == 4
+    assert score.update_days == 1
     assert score.breakdown.achievements == 0
-    assert score.total == 10 + 8 + 3
+    assert score.total == 10 + 3 + 3
 
 
 def test_streak_points_capped():
-    logs = [LogEntry(days_ago(i), 1) for i in range(20)]
-    score = compute_score([], logs, 0, "all", TODAY)
+    updates = [UpdateEntry(days_ago(i)) for i in range(20)]
+    score = compute_score([], updates, 0, "all", TODAY)
     assert score.streak == 20
     assert score.breakdown.streak == 30
 
@@ -83,12 +84,12 @@ def test_metrics():
         CompletedTask("critical", at(days_ago(5)), days_ago(1)),  # 4 days early
         CompletedTask("low", at(days_ago(1)), days_ago(2)),  # late
     ]
-    logs = [LogEntry(days_ago(1), 5), LogEntry(days_ago(1), 4), LogEntry(TODAY, 1)]
-    m = compute_metrics(tasks, logs, TODAY)
+    updates = [UpdateEntry(days_ago(1), 1), UpdateEntry(days_ago(1), 2), UpdateEntry(TODAY, None)]
+    m = compute_metrics(tasks, updates, TODAY, done_project_ids=[3, None])
     assert m.tasks_completed == 2
     assert m.on_time_completed == 1
     assert m.critical_completed == 1
     assert m.max_days_early == 4
-    assert m.total_hours == 10
-    assert m.max_hours_one_day == 9
+    assert m.update_days == 2
+    assert m.projects_touched == 3
     assert m.current_streak == 2

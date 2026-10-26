@@ -1,25 +1,39 @@
 import { Plus, Search } from 'lucide-react'
 import { useState, type DragEvent } from 'react'
-import { useMyStats, useTasks, useUpdateTask } from '../api/hooks'
+import { useSearchParams } from 'react-router-dom'
+import { useMyStats, useProjects, useTasks, useUpdateTask } from '../api/hooks'
 import type { Task, TaskStatus } from '../api/types'
 import { useMe } from '../auth/AuthContext'
-import { useTaskDrawer } from '../components/TaskDrawer'
+import { ProjectPicker, useTaskDrawer } from '../components/TaskDrawer'
 import { useToast } from '../components/Toast'
-import { ErrorLine, PriorityMark, Progress, Skel, STATUSES, STATUS_LABEL, StatusPill } from '../components/ui'
-import { dueLabel, fmtHours, fmtInt, plural } from '../lib/format'
+import { ErrorLine, PriorityMark, ProjectChip, Progress, Skel, STATUSES, STATUS_LABEL, StatusPill } from '../components/ui'
+import { dueLabel, fmtDayLong, fmtInt, plural } from '../lib/format'
 
 const DONE_SHOWN = 8
 
 export default function MyWork() {
   const me = useMe()
-  const [view, setView] = useState<'board' | 'list'>('board')
+  const [params, setParams] = useSearchParams()
+  // ?project=none shows tasks without a project, in the list view so they can be mapped in place.
+  const projectParam = params.get('project') ?? ''
+  const unmapped = projectParam === 'none'
+  const projectId = unmapped ? undefined : Number(projectParam) || undefined
+  const [view, setView] = useState<'board' | 'list'>(unmapped ? 'list' : 'board')
   const [q, setQ] = useState('')
-  const { data, isLoading, isError, refetch } = useTasks({ owner_id: me.id, q })
+  const { data, isLoading, isError, refetch } = useTasks({ owner_id: me.id, q, project_id: projectId, unmapped })
   const { data: stats } = useMyStats()
+  const projects = useProjects('active')
   const { open } = useTaskDrawer()
 
   const open_ = data?.filter((t) => t.status !== 'done').length ?? 0
-  const hours = stats?.hours_this_week ?? 0
+  const setProject = (value: string) => {
+    setParams((p) => {
+      if (value) p.set('project', value)
+      else p.delete('project')
+      return p
+    })
+    if (value === 'none') setView('list')
+  }
 
   return (
     <>
@@ -27,11 +41,14 @@ export default function MyWork() {
         <div>
           <h1>My work</h1>
           <p className="sub">
-            {data ? `${plural(open_, 'open task')} · ${fmtHours(hours)} h logged this week` : ' '}
+            {data && stats
+              ? `${plural(open_, 'open task')} · updates on ${plural(stats.update_days_this_week, 'day')} this week` +
+                (stats.unmapped_tasks && !unmapped ? ` · ${fmtInt(stats.unmapped_tasks)} without a project` : '')
+              : ' '}
           </p>
         </div>
         <div className="actions">
-          <button className="btn primary" onClick={() => open('new')}>
+          <button className="btn primary" onClick={() => open('new', { projectId })}>
             <Plus /> New task
           </button>
         </div>
@@ -42,6 +59,15 @@ export default function MyWork() {
           <Search aria-hidden="true" />
           <input className="input" placeholder="Search your tasks" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search your tasks" />
         </div>
+        <select className="select" value={projectParam} onChange={(e) => setProject(e.target.value)} aria-label="Project">
+          <option value="">All projects</option>
+          <option value="none">No project</option>
+          {projects.data?.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+        </select>
         <span className="grow" />
         <div className="segmented" role="group" aria-label="View">
           <button aria-pressed={view === 'board'} onClick={() => setView('board')}>
@@ -67,9 +93,9 @@ export default function MyWork() {
           ))}
         </div>
       ) : view === 'board' ? (
-        <Board tasks={data} filtered={q !== ''} />
+        <Board tasks={data} filtered={q !== '' || projectParam !== ''} />
       ) : (
-        <TaskTable tasks={data} />
+        <TaskTable tasks={data} mappable />
       )}
     </>
   )
@@ -146,21 +172,33 @@ function TaskCard({ task, dragging, onDrag }: { task: Task; dragging: boolean; o
       onClick={() => open(task.id)}
     >
       <div className="ct">{task.title}</div>
+      <div className="cproj">
+        <ProjectChip project={task.project} plain />
+      </div>
       {task.pending_notes && task.status !== 'done' ? <div className="pending">{task.pending_notes}</div> : null}
       <div className="cm">
         <PriorityMark priority={task.priority} />
         <span className="sp" />
         {task.due_date && task.status !== 'done' ? <span className={task.is_overdue ? 'overdue' : ''}>{dueLabel(task.due_date)}</span> : null}
-        <span className="num">{fmtHours(task.hours_logged)} h</span>
+        <span>{task.last_update ? fmtDayLong(task.last_update.date) : 'No updates'}</span>
       </div>
       {task.status !== 'done' && task.status !== 'todo' ? <Progress value={task.progress_pct} accent /> : null}
     </button>
   )
 }
 
-export function TaskTable({ tasks, showOwner }: { tasks: Task[]; showOwner?: boolean }) {
+/** A task list. With `mappable`, tasks the viewer may edit get an inline project picker. */
+export function TaskTable({ tasks, showOwner, mappable }: { tasks: Task[]; showOwner?: boolean; mappable?: boolean }) {
   const { open } = useTaskDrawer()
-  if (tasks.length === 0) return <div className="panel"><div className="empty">No tasks match.</div></div>
+  const me = useMe()
+  const projects = useProjects('active')
+  const options = (projects.data ?? []).map(({ id, name, color, status }) => ({ id, name, color, status }))
+  if (tasks.length === 0)
+    return (
+      <div className="panel">
+        <div className="empty">No tasks match.</div>
+      </div>
+    )
   return (
     <div className="panel">
       <div className="table-wrap">
@@ -169,11 +207,12 @@ export function TaskTable({ tasks, showOwner }: { tasks: Task[]; showOwner?: boo
             <tr>
               <th>Task</th>
               {showOwner ? <th>Owner</th> : null}
+              <th>Project</th>
               <th>Status</th>
               <th className="hide-phone">Priority</th>
               <th className="hide-phone">Due</th>
               <th className="num hide-phone">Progress</th>
-              <th className="num">Logged</th>
+              <th className="hide-phone">Last update</th>
             </tr>
           </thead>
           <tbody>
@@ -184,6 +223,13 @@ export function TaskTable({ tasks, showOwner }: { tasks: Task[]; showOwner?: boo
                   {t.pending_notes && t.status !== 'done' ? <span>Pending: {t.pending_notes.split('\n')[0]}</span> : null}
                 </td>
                 {showOwner ? <td style={{ whiteSpace: 'nowrap' }}>{t.owner.full_name}</td> : null}
+                <td onClick={(e) => mappable && e.stopPropagation()}>
+                  {mappable && (t.owner_id === me.id || me.role === 'admin') ? (
+                    <ProjectPicker task={t} projects={options} />
+                  ) : (
+                    <ProjectChip project={t.project} />
+                  )}
+                </td>
                 <td>
                   <StatusPill status={t.status} />
                 </td>
@@ -194,9 +240,8 @@ export function TaskTable({ tasks, showOwner }: { tasks: Task[]; showOwner?: boo
                   {t.due_date ? dueLabel(t.due_date, t.status === 'done') : <span className="dash">—</span>}
                 </td>
                 <td className="num hide-phone">{t.progress_pct}%</td>
-                <td className="num" style={{ whiteSpace: 'nowrap' }}>
-                  {fmtHours(t.hours_logged)} h
-                  {t.estimated_hours != null ? <span className="muted"> / {fmtHours(t.estimated_hours)}</span> : null}
+                <td className="hide-phone muted" style={{ whiteSpace: 'nowrap' }}>
+                  {t.last_update ? fmtDayLong(t.last_update.date) : <span className="dash">—</span>}
                 </td>
               </tr>
             ))}

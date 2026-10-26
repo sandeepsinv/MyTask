@@ -1,7 +1,5 @@
-const nf1 = new Intl.NumberFormat('en', { minimumFractionDigits: 0, maximumFractionDigits: 1 })
 const nf0 = new Intl.NumberFormat('en', { maximumFractionDigits: 0 })
 
-export const fmtHours = (h: number) => nf1.format(h)
 export const fmtInt = (n: number) => nf0.format(n)
 
 /** Local calendar date as YYYY-MM-DD (not UTC, so "today" is the user's today). */
@@ -28,6 +26,23 @@ const weekday = new Intl.DateTimeFormat('en', { weekday: 'short' })
 
 export function fmtDay(iso: string): string {
   return shortDate.format(parseDay(iso))
+}
+
+const longDay = new Intl.DateTimeFormat('en', { weekday: 'short', day: 'numeric', month: 'short' })
+
+/** "Today", "Yesterday", or "Mon, 20 Oct" for a calendar day. */
+export function fmtDayLong(iso: string): string {
+  const d = daysFromToday(iso)
+  if (d === 0) return 'Today'
+  if (d === -1) return 'Yesterday'
+  return longDay.format(parseDay(iso))
+}
+
+/** Shift a YYYY-MM-DD day by n days. */
+export function addDays(iso: string, n: number): string {
+  const d = parseDay(iso)
+  d.setDate(d.getDate() + n)
+  return isoDate(d)
 }
 
 /** "Due today", "Due tomorrow", "Due in 4 days", "3 days overdue", "Due 12 Nov". */

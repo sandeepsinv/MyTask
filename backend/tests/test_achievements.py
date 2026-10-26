@@ -1,6 +1,7 @@
 from datetime import date, timedelta
 
 from .test_tasks import create_task
+from .test_updates import post_update
 
 
 def unlocked(client, headers, user_id):
@@ -17,13 +18,14 @@ def test_first_steps_and_heavy_lifter(client, alice):
     assert {"first_steps", "heavy_lifter"} <= unlocked(client, headers, user["id"])
 
 
-def test_marathon_from_logs(client, alice):
+def test_team_player_across_three_projects(client, alice):
     user, headers = alice
-    task = create_task(client, headers)
-    client.post(f"/api/tasks/{task['id']}/logs", json={"date": str(date.today()), "hours": 5}, headers=headers)
-    assert "marathon" not in unlocked(client, headers, user["id"])
-    client.post(f"/api/tasks/{task['id']}/logs", json={"date": str(date.today()), "hours": 3}, headers=headers)
-    assert "marathon" in unlocked(client, headers, user["id"])
+    for name in ("Alpha", "Beta", "Gamma"):
+        assert "team_player" not in unlocked(client, headers, user["id"])
+        p = client.post("/api/projects", json={"name": name}, headers=headers).json()
+        t = create_task(client, headers, project_id=p["id"])
+        post_update(client, headers, t["id"])
+    assert "team_player" in unlocked(client, headers, user["id"])
 
 
 def test_on_fire_streak(client, alice):
@@ -31,7 +33,7 @@ def test_on_fire_streak(client, alice):
     task = create_task(client, headers)
     for i in range(7):
         d = date.today() - timedelta(days=i)
-        client.post(f"/api/tasks/{task['id']}/logs", json={"date": str(d), "hours": 1}, headers=headers)
+        post_update(client, headers, task["id"], on=d)
     assert "on_fire" in unlocked(client, headers, user["id"])
 
 
@@ -62,10 +64,11 @@ def test_earned_matrix(client, alice, bob):
 def test_progress_reported_for_locked(client, alice):
     user, headers = alice
     task = create_task(client, headers)
-    client.post(f"/api/tasks/{task['id']}/logs", json={"date": str(date.today()), "hours": 10}, headers=headers)
+    for i in range(3):
+        post_update(client, headers, task["id"], on=date.today() - timedelta(days=i))
     statuses = {a["key"]: a for a in client.get(f"/api/users/{user['id']}/achievements", headers=headers).json()}
-    assert statuses["centurion"]["unlocked"] is False
-    assert statuses["centurion"]["progress"] == 0.1
+    assert statuses["storyteller"]["unlocked"] is False
+    assert statuses["storyteller"]["progress"] == 0.1
 
 
 def test_leaderboard_ranks_and_includes_achievement_points(client, alice, bob):
@@ -74,7 +77,7 @@ def test_leaderboard_ranks_and_includes_achievement_points(client, alice, bob):
     t = create_task(client, a_headers, priority="high")
     client.patch(f"/api/tasks/{t['id']}", json={"status": "done"}, headers=a_headers)
     t2 = create_task(client, b_headers, priority="low")
-    client.post(f"/api/tasks/{t2['id']}/logs", json={"date": str(date.today()), "hours": 1}, headers=b_headers)
+    post_update(client, b_headers, t2["id"])
 
     board = client.get("/api/leaderboard?period=all", headers=a_headers).json()
     first = board[0]
@@ -86,7 +89,7 @@ def test_leaderboard_ranks_and_includes_achievement_points(client, alice, bob):
     assert first["score"] == 30
 
     bob_row = next(r for r in board if r["user"]["id"] == b_user["id"])
-    assert bob_row["score"] == 2 + 3  # 1h + 1-day streak
+    assert bob_row["score"] == 3 + 3  # 1 day with an update + 1-day streak
     assert bob_row["rank"] == 2
 
     week = client.get("/api/leaderboard?period=week", headers=a_headers).json()
@@ -97,16 +100,21 @@ def test_stats_endpoints(client, alice):
     _, headers = alice
     t = create_task(client, headers)
     client.patch(f"/api/tasks/{t['id']}", json={"status": "in_progress"}, headers=headers)
-    client.post(f"/api/tasks/{t['id']}/logs", json={"date": str(date.today()), "hours": 2}, headers=headers)
+    post_update(client, headers, t["id"], "Wired up the API")
 
     ov = client.get("/api/stats/overview", headers=headers).json()
     assert ov["status_counts"]["in_progress"] == 1
-    assert ov["hours_this_week"] == 2
-    assert len(ov["daily_hours"]) == 14
+    assert ov["updates_today"] == 1
+    assert ov["people_updated_today"] == 1
+    assert ov["unmapped_open_tasks"] == 1
     alice_row = next(m for m in ov["members"] if m["user"]["username"] == "alice")
     assert alice_row["current_task"]["id"] == t["id"]
+    assert alice_row["latest_update"]["note"] == "Wired up the API"
+    assert alice_row["updated_today"] is True
 
     me = client.get("/api/stats/me", headers=headers).json()
-    assert me["hours_this_week"] == 2
+    assert me["update_days_this_week"] == 1
+    assert me["updated_today"] is True
+    assert me["unmapped_tasks"] == 1
     assert me["open_tasks"] == 1
     assert me["rank"] >= 1

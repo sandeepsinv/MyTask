@@ -3,7 +3,7 @@ import { useAchievementCatalog, useAchievements, useEarnedMatrix, useMembers } f
 import type { AchievementStatus } from '../api/types'
 import { useMe } from '../auth/AuthContext'
 import { AchievementIcon, Avatar, ErrorLine, Progress, Skel } from '../components/ui'
-import { fmtHours, fmtInt, fmtRelative } from '../lib/format'
+import { fmtInt, fmtRelative } from '../lib/format'
 
 const TIER_LABEL = { bronze: 'Bronze', silver: 'Silver', gold: 'Gold' } as const
 
@@ -136,11 +136,15 @@ function TeamMatrix({ selected, onSelect }: { selected: number; onSelect: (id: n
   )
 }
 
+const UNITS: Record<string, string> = {
+  on_fire: ' days in a row',
+  storyteller: ' days',
+  early_bird: ' days early',
+  team_player: ' projects',
+}
+
 function progressLabel(a: AchievementStatus): string {
-  const value = a.progress * a.target
-  const unit = a.key === 'marathon' || a.key === 'centurion' ? ' h' : a.key === 'on_fire' ? ' d' : a.key === 'early_bird' ? ' d early' : ''
-  const f = unit.includes('h') ? fmtHours : fmtInt
-  return `${f(Math.floor(value * 10) / 10)} / ${f(a.target)}${unit}`
+  return `${fmtInt(Math.floor(a.progress * a.target))} / ${fmtInt(a.target)}${UNITS[a.key] ?? ''}`
 }
 
 function Badge({ a }: { a: AchievementStatus }) {

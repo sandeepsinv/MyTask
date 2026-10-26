@@ -19,12 +19,12 @@ export const admin: UserOut = { ...sara, id: 1, username: 'admin', full_name: 'A
 const omar = { ...sara, id: 3, username: 'omar.farouk', full_name: 'Omar Farouk', avatar_color: '#c2410c' }
 const lina = { ...sara, id: 4, username: 'lina.chen', full_name: 'Lina Chen', avatar_color: '#a16207' }
 
-const breakdown = (tasks: number, hours: number) => ({ tasks, on_time: 0, hours, streak: 0, achievements: 0 })
+const breakdown = (tasks: number, updates: number) => ({ tasks, on_time: 0, updates, streak: 0, achievements: 0 })
 
 export const leaderboard: LeaderboardEntry[] = [
-  { rank: 1, user: omar, score: 60, tasks_completed: 2, hours: 20, streak: 4, achievements: 3, breakdown: breakdown(20, 40) },
-  { rank: 2, user: sara, score: 34, tasks_completed: 1, hours: 12, streak: 2, achievements: 1, breakdown: breakdown(10, 24) },
-  { rank: 3, user: lina, score: 0, tasks_completed: 0, hours: 0, streak: 0, achievements: 0, breakdown: breakdown(0, 0) },
+  { rank: 1, user: omar, score: 60, tasks_completed: 2, update_days: 8, streak: 4, achievements: 3, breakdown: breakdown(20, 40) },
+  { rank: 2, user: sara, score: 34, tasks_completed: 1, update_days: 5, streak: 2, achievements: 1, breakdown: breakdown(10, 24) },
+  { rank: 3, user: lina, score: 0, tasks_completed: 0, update_days: 0, streak: 0, achievements: 0, breakdown: breakdown(0, 0) },
 ]
 
 export const VALID = { username: 'sara.haddad', password: 'demo1234' }

@@ -1,4 +1,4 @@
-"""Fill the database with a small demo team, their tasks and three weeks of logged hours.
+"""Fill the database with a small demo team, projects, tasks and three weeks of daily updates.
 
     python -m scripts.seed_demo            # adds the demo team (skips people who already exist)
     python -m scripts.seed_demo --reset    # wipes the database first
@@ -13,8 +13,8 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import select
 
 from app.database import Base, SessionLocal, engine
-from app.main import seed_admin
-from app.models import Task, User, WorkLog
+from app.main import init_db, seed_admin
+from app.models import DailyUpdate, Project, Task, User
 from app.security import hash_password
 from app.services.achievements import evaluate_and_award
 
@@ -27,60 +27,99 @@ PEOPLE = [
     ("yusuf.kaya", "Yusuf Kaya", "DevOps engineer", "#4d7c0f"),
 ]
 
-# (title, priority, status, progress, est hours, pending, tags)
+PROJECTS = [
+    ("Billing v2", "Move invoicing and payments onto the provider's v2 API.", "#2563eb", "omar.farouk"),
+    ("Q4 release 2.3", "Everything that ships in the 2.3 release.", "#1b6e66", "sara.haddad"),
+    ("Platform reliability", "Staging cluster, backups and alerting.", "#4d7c0f", "yusuf.kaya"),
+    ("Hiring", "Frontend hire and interview loop.", "#be123c", "sara.haddad"),
+]
+
+# (title, project, priority, status, progress, pending, tags, [daily notes, newest last])
 TASKS = {
     "sara.haddad": [
-        ("Q4 roadmap review with leadership", "high", "in_progress", 60, 12, "Waiting on the finance numbers for the pricing slide", "planning"),
-        ("Write onboarding flow spec", "medium", "done", 100, 6, "", "spec,onboarding"),
-        ("Interview loop for the frontend hire", "medium", "todo", 0, 5, "", "hiring"),
-        ("Customer call notes: Northwind", "low", "done", 100, 2, "", "research"),
+        ("Q4 roadmap review with leadership", "Q4 release 2.3", "high", "in_progress", 60,
+         "Waiting on the finance numbers for the pricing slide", "planning",
+         ["Collected feature requests from support", "Drafted the roadmap outline", "Reviewed scope with Omar and Priya", "Built the pricing slide", "Rehearsed the review"]),
+        ("Write onboarding flow spec", "Q4 release 2.3", "medium", "done", 100, "", "spec,onboarding",
+         ["Mapped the current onboarding steps", "Wrote the spec draft", "Folded in design feedback"]),
+        ("Interview loop for the frontend hire", "Hiring", "medium", "todo", 0, "", "hiring", []),
+        ("Customer call notes: Northwind", None, "low", "done", 100, "", "research",
+         ["Call with Northwind's ops team, wrote up notes"]),
     ],
     "omar.farouk": [
-        ("Migrate invoices to the v2 billing API", "critical", "blocked", 45, 24, "Blocked on the payments provider enabling the sandbox webhook", "billing,backend"),
-        ("Rate limiting on the public API", "high", "in_progress", 70, 10, "Load test against staging", "backend,api"),
-        ("Fix duplicate email notifications", "high", "done", 100, 4, "", "bug"),
-        ("Postgres index for task search", "medium", "done", 100, 3, "", "backend,perf"),
+        ("Migrate invoices to the v2 billing API", "Billing v2", "critical", "blocked", 45,
+         "Blocked on the payments provider enabling the sandbox webhook", "billing,backend",
+         ["Mapped old invoice fields to v2", "Wrote the migration script", "Dry run on a copy of production", "Raised the sandbox webhook issue with the provider"]),
+        ("Rate limiting on the public API", "Platform reliability", "high", "in_progress", 70, "Load test against staging", "backend,api",
+         ["Picked a token-bucket design", "Implemented the limiter middleware", "Added per-key limits and tests", "Tuned limits with Yusuf"]),
+        ("Fix duplicate email notifications", "Q4 release 2.3", "high", "done", 100, "", "bug",
+         ["Reproduced the duplicate send", "Fixed the retry race and added a test"]),
+        ("Postgres index for task search", None, "medium", "done", 100, "", "backend,perf",
+         ["Profiled slow search queries", "Added a trigram index"]),
     ],
     "priya.nair": [
-        ("Kanban drag and drop", "high", "in_progress", 80, 14, "Keyboard fallback for moving cards", "frontend"),
-        ("Dark theme pass", "medium", "done", 100, 8, "", "frontend,design"),
-        ("Accessibility audit fixes", "medium", "todo", 0, 6, "", "a11y"),
-        ("Settings page layout", "low", "done", 100, 5, "", "frontend"),
+        ("Kanban drag and drop", "Q4 release 2.3", "high", "in_progress", 80, "Keyboard fallback for moving cards", "frontend",
+         ["Prototyped drag between columns", "Wired drops to the status API", "Polished drop targets", "Fixed a flicker on drop", "Started the keyboard fallback"]),
+        ("Dark theme pass", "Q4 release 2.3", "medium", "done", 100, "", "frontend,design",
+         ["Audited colours in dark mode", "Fixed contrast on pills and charts"]),
+        ("Accessibility audit fixes", None, "medium", "todo", 0, "", "a11y", []),
+        ("Billing settings page", "Billing v2", "low", "in_progress", 30, "", "frontend",
+         ["Built the layout from Daniel's mock"]),
     ],
     "daniel.ortiz": [
-        ("Leaderboard and badge visuals", "high", "in_progress", 55, 16, "Gold tier icon still reads too similar to silver", "design"),
-        ("Empty states copy and layout", "medium", "done", 100, 4, "", "design,copy"),
-        ("Usability test, round 2", "medium", "todo", 0, 8, "", "research"),
+        ("Leaderboard and badge visuals", "Q4 release 2.3", "high", "in_progress", 55, "Gold tier icon still reads too similar to silver", "design",
+         ["Explored three badge styles", "Picked the outline style with the team", "Drew the tier icons", "Second pass on the gold tier"]),
+        ("Empty states copy and layout", "Q4 release 2.3", "medium", "done", 100, "", "design,copy",
+         ["Wrote empty-state copy for every screen", "Handed off to Priya"]),
+        ("Billing settings mock", "Billing v2", "medium", "done", 100, "", "design",
+         ["Sketched the billing settings layout", "Final mock in Figma"]),
+        ("Usability test, round 2", None, "medium", "todo", 0, "", "research", []),
     ],
     "lina.chen": [
-        ("Regression suite for task permissions", "high", "in_progress", 35, 10, "Need an admin test account on staging", "qa"),
-        ("Smoke tests in CI", "medium", "done", 100, 6, "", "qa,ci"),
-        ("Bug bash for the 2.3 release", "critical", "todo", 0, 6, "", "qa,release"),
+        ("Regression suite for task permissions", "Q4 release 2.3", "high", "in_progress", 35, "Need an admin test account on staging", "qa",
+         ["Listed the permission cases", "Automated the member-vs-owner cases", "Started the admin cases"]),
+        ("Smoke tests in CI", "Platform reliability", "medium", "done", 100, "", "qa,ci",
+         ["Wrote the smoke suite", "Hooked it into the CI pipeline"]),
+        ("Bug bash for the 2.3 release", "Q4 release 2.3", "critical", "todo", 0, "", "qa,release", []),
     ],
     "yusuf.kaya": [
-        ("Move staging to the new cluster", "high", "in_progress", 65, 18, "DNS cut-over scheduled for Thursday", "infra"),
-        ("Nightly database backups", "critical", "done", 100, 5, "", "infra"),
-        ("Cost report for October", "low", "blocked", 20, 3, "Waiting on the cloud invoice", "infra,finance"),
+        ("Move staging to the new cluster", "Platform reliability", "high", "in_progress", 65, "DNS cut-over scheduled for Thursday", "infra",
+         ["Provisioned the new cluster", "Migrated the databases", "Moved the workers", "Load-tested staging with Omar", "Prepared the DNS cut-over plan"]),
+        ("Nightly database backups", "Platform reliability", "critical", "done", 100, "", "infra",
+         ["Set up nightly snapshots", "Tested a full restore"]),
+        ("Cost report for October", None, "low", "blocked", 20, "Waiting on the cloud invoice", "infra,finance",
+         ["Pulled usage from the cloud console"]),
     ],
 }
 
-NOTES = ["Pairing session", "Implementation", "Review and fixes", "Tests", "Investigation", "Docs", "Meetings", "Follow-ups"]
+
+def working_days_back(today: date, n: int, rng: random.Random) -> list[date]:
+    """n distinct recent days, mostly weekdays, newest last."""
+    days: list[date] = []
+    d = today
+    while len(days) < n:
+        if d.weekday() < 5 or rng.random() < 0.15:
+            days.append(d)
+        d -= timedelta(days=rng.choice([1, 1, 1, 2]))
+    return sorted(days)
 
 
 def main(reset: bool) -> None:
     if reset:
         Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
+    init_db()
     rng = random.Random(7)
     today = date.today()
 
     with SessionLocal() as db:
         seed_admin(db)
+        users: dict[str, User] = {}
         for username, name, title, color in PEOPLE:
-            if db.scalar(select(User).where(User.username == username)):
+            existing = db.scalar(select(User).where(User.username == username))
+            if existing:
                 print(f"skip {username} (exists)")
                 continue
-            user = User(
+            users[username] = User(
                 username=username,
                 full_name=name,
                 title=title,
@@ -88,46 +127,44 @@ def main(reset: bool) -> None:
                 hashed_password=hash_password("demo1234"),
                 avatar_color=color,
             )
-            db.add(user)
-            db.flush()
+            db.add(users[username])
+        db.flush()
 
-            # Logs on most weekdays of the last three weeks; a recent unbroken run for some people.
-            streak_days = rng.choice([2, 4, 6, 9])
-            for title_, priority, status, progress, est, pending, tags in TASKS[username]:
-                start = today - timedelta(days=rng.randint(8, 20))
-                due = start + timedelta(days=rng.randint(6, 18))
+        projects: dict[str, Project] = {}
+        for name, description, color, creator in PROJECTS:
+            project = db.scalar(select(Project).where(Project.name == name))
+            if project is None and creator in users:
+                project = Project(name=name, description=description, color=color, created_by_id=users[creator].id)
+                db.add(project)
+            if project is not None:
+                projects[name] = project
+        db.flush()
+
+        for username, user in users.items():
+            for title, project, priority, status, progress, pending, tags, notes in TASKS[username]:
+                start = today - timedelta(days=rng.randint(10, 20))
                 task = Task(
                     owner_id=user.id,
-                    title=title_,
-                    description="",
+                    project_id=projects[project].id if project in projects else None,
+                    title=title,
                     status=status,
                     priority=priority,
                     start_date=start,
-                    due_date=due,
-                    estimated_hours=est,
+                    due_date=start + timedelta(days=rng.randint(8, 20)),
                     progress_pct=progress,
                     pending_notes=pending,
                     tags=tags,
                 )
-                if status == "done":
-                    finished = min(today, start + timedelta(days=rng.randint(2, 10)))
-                    task.completed_at = datetime.combine(finished, time(16, 30))
                 db.add(task)
                 db.flush()
-
-                if status == "todo":
+                if not notes:
                     continue
-                last = task.completed_at.date() if task.completed_at else today
-                budget = est * (progress / 100) * rng.uniform(0.85, 1.15)
-                # Walk back from the last working day so open tasks have recent hours.
-                d = last
-                while d >= start and (budget > 0.4 or (today - d).days < streak_days):
-                    recent = (today - d).days < streak_days
-                    if (d.weekday() < 5 and rng.random() < 0.6) or recent:
-                        h = round(max(0.5, min(budget, rng.choice([1, 1.5, 2, 2.5, 3, 4]))), 1)
-                        db.add(WorkLog(task_id=task.id, user_id=user.id, date=d, hours=h, note=rng.choice(NOTES)))
-                        budget -= h
-                    d -= timedelta(days=1)
+                # Finished work ended a while ago; open work runs up to today.
+                end = today - timedelta(days=rng.randint(3, 8)) if status == "done" else today
+                for day, note in zip(working_days_back(end, len(notes), rng), notes):
+                    db.add(DailyUpdate(task_id=task.id, user_id=user.id, date=day, note=note))
+                if status == "done":
+                    task.completed_at = datetime.combine(end, time(16, 30))
             db.commit()
             evaluate_and_award(db, user)
             print(f"added {username}")

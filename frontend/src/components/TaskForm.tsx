@@ -1,5 +1,5 @@
 import { useForm } from 'react-hook-form'
-import type { Task, TaskInput } from '../api/types'
+import type { ProjectRef, Task, TaskInput } from '../api/types'
 import { PRIORITIES, PRIORITY_LABEL, STATUSES, STATUS_LABEL } from './ui'
 
 interface FormValues {
@@ -7,23 +7,24 @@ interface FormValues {
   description: string
   status: TaskInput['status']
   priority: TaskInput['priority']
+  project_id: string
   start_date: string
   due_date: string
-  estimated_hours: string
   progress_pct: number
   pending_notes: string
   tags: string
 }
 
-export function toFormValues(task?: Task | null): FormValues {
+export function toFormValues(task?: Task | null, defaultProjectId?: number | null): FormValues {
+  const projectId = task ? task.project_id : defaultProjectId
   return {
     title: task?.title ?? '',
     description: task?.description ?? '',
     status: task?.status ?? 'todo',
     priority: task?.priority ?? 'medium',
+    project_id: projectId != null ? String(projectId) : '',
     start_date: task?.start_date ?? '',
     due_date: task?.due_date ?? '',
-    estimated_hours: task?.estimated_hours != null ? String(task.estimated_hours) : '',
     progress_pct: task?.progress_pct ?? 0,
     pending_notes: task?.pending_notes ?? '',
     tags: task?.tags.join(', ') ?? '',
@@ -36,9 +37,9 @@ export function toInput(v: FormValues): TaskInput {
     description: v.description.trim(),
     status: v.status,
     priority: v.priority,
+    project_id: v.project_id === '' ? null : Number(v.project_id),
     start_date: v.start_date || null,
     due_date: v.due_date || null,
-    estimated_hours: v.estimated_hours === '' ? null : Number(v.estimated_hours),
     progress_pct: Number(v.progress_pct),
     pending_notes: v.pending_notes.trim(),
     tags: v.tags
@@ -53,10 +54,15 @@ export const TASK_FORM_ID = 'task-form'
 /** The fields of a task. The submit button lives in the drawer footer and targets this form by id. */
 export function TaskForm({
   task,
+  projects,
+  defaultProjectId,
   onSubmit,
   error,
 }: {
   task?: Task | null
+  /** Active projects to choose from. */
+  projects: ProjectRef[]
+  defaultProjectId?: number | null
   onSubmit: (input: TaskInput) => void
   error?: string | null
 }) {
@@ -66,11 +72,14 @@ export function TaskForm({
     watch,
     formState: { errors },
     setValue,
-  } = useForm<FormValues>({ defaultValues: toFormValues(task) })
+  } = useForm<FormValues>({ defaultValues: toFormValues(task, defaultProjectId) })
 
   register('progress_pct')
   const progress = watch('progress_pct')
   const start = watch('start_date')
+
+  const options =
+    task?.project && !projects.some((p) => p.id === task.project!.id) ? [task.project, ...projects] : projects
 
   return (
     <form id={TASK_FORM_ID} className="form" onSubmit={handleSubmit((v) => onSubmit(toInput(v)))} noValidate>
@@ -88,6 +97,19 @@ export function TaskForm({
           })}
         />
         {errors.title ? <span className="error">{errors.title.message}</span> : null}
+      </label>
+
+      <label className="field">
+        <span>Project</span>
+        <select className="select" {...register('project_id')}>
+          <option value="">No project</option>
+          {options.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+              {p.status === 'archived' ? ' (archived)' : ''}
+            </option>
+          ))}
+        </select>
       </label>
 
       <div className="form-row">
@@ -132,41 +154,22 @@ export function TaskForm({
         </label>
       </div>
 
-      <div className="form-row">
-        <label className="field">
-          <span>
-            Estimate <span className="hint">hours</span>
-          </span>
-          <input
-            type="number"
-            min={0}
-            step={0.5}
-            className="input"
-            placeholder="8"
-            aria-invalid={errors.estimated_hours ? 'true' : 'false'}
-            {...register('estimated_hours', {
-              validate: (v) => v === '' || (Number(v) >= 0 && Number(v) <= 10000) || 'Enter a number of hours',
-            })}
-          />
-          {errors.estimated_hours ? <span className="error">{errors.estimated_hours.message}</span> : null}
-        </label>
-        <label className="field">
-          <span>
-            Progress <span className="hint num">{progress}%</span>
-          </span>
-          {/* Controlled so an untouched slider submits its real value, not the browser's midpoint. */}
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            style={{ height: 40, accentColor: 'var(--accent)' }}
-            value={progress}
-            onChange={(e) => setValue('progress_pct', Number(e.target.value), { shouldDirty: true })}
-            aria-label="Progress"
-          />
-        </label>
-      </div>
+      <label className="field">
+        <span>
+          Progress <span className="hint num">{progress}%</span>
+        </span>
+        {/* Controlled so an untouched slider submits its real value, not the browser's midpoint. */}
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          style={{ height: 32, accentColor: 'var(--accent)' }}
+          value={progress}
+          onChange={(e) => setValue('progress_pct', Number(e.target.value), { shouldDirty: true })}
+          aria-label="Progress"
+        />
+      </label>
 
       <label className="field">
         <span>Details</span>

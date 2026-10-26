@@ -1,4 +1,4 @@
-import { Award, Home, KanbanSquare, LogOut, Menu, Moon, Sun, Trophy, Users, UserCog, X } from 'lucide-react'
+import { Award, FolderKanban, Home, KanbanSquare, LogOut, Menu, Moon, NotebookPen, Sun, Trophy, Users, UserCog, X } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAuth, useMe } from '../auth/AuthContext'
@@ -17,6 +17,8 @@ export function BrandMark({ className = 'brand-mark' }: { className?: string }) 
 
 const NAV = [
   { to: '/', label: 'Home', icon: Home, end: true },
+  { to: '/projects', label: 'Projects', icon: FolderKanban },
+  { to: '/daily', label: 'Daily updates', icon: NotebookPen },
   { to: '/my-work', label: 'My work', icon: KanbanSquare },
   { to: '/team', label: 'Team', icon: Users },
   { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
@@ -25,6 +27,8 @@ const NAV = [
 
 const TITLES: Record<string, string> = {
   '/': 'Home',
+  '/projects': 'Projects',
+  '/daily': 'Daily updates',
   '/my-work': 'My work',
   '/team': 'Team',
   '/leaderboard': 'Leaderboard',
@@ -44,7 +48,7 @@ export function AppShell() {
     <div className="app">
       <header className="topbar">
         <BrandMark />
-        <span className="where">{TITLES[location.pathname] ?? 'MyTask'}</span>
+        <span className="where">{TITLES[location.pathname] ?? (location.pathname.startsWith('/projects/') ? 'Project' : 'MyTask')}</span>
         <button className="icon-btn" onClick={() => setOpen((o) => !o)} aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open}>
           {open ? <X /> : <Menu />}
         </button>
