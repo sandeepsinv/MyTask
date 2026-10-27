@@ -1,6 +1,6 @@
-# MyTask — team task dashboard
+# PSITasky — team task dashboard
 
-MyTask shows what everyone on the team worked on each day, which projects are moving, and what's stuck. It also runs a leaderboard with points and achievements.
+PSITasky shows what everyone on the team worked on each day, which projects are moving, and what's stuck. It also runs a leaderboard with points and achievements.
 
 - **Sign-in only.** There is no public sign-up. An admin creates every member's username and password from **Members** in the dashboard.
 - **Projects.** Any member can create a project. Tasks belong to a project, and a task can be moved to a different project or have no project at all. A project's people are whoever has a task in it.

@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { useForm } from 'react-hook-form'
 import { Link } from 'react-router-dom'
 import { errorMessage } from '../api/client'
@@ -8,8 +9,8 @@ import { useTaskDrawer } from './TaskDrawer'
 import { useToast } from './Toast'
 import { Avatar, Dialog, ProjectChip } from './ui'
 
-/** Project hues: identity, not data, so they stay pale in avatars and solid only in the small swatch. */
-export const PROJECT_COLORS = ['#1b6e66', '#2563eb', '#c2410c', '#be123c', '#4d7c0f', '#a16207', '#0369a1', '#6b6b69']
+/** Project colours: shades of the two brand colours (navy #282B66, orange #E96831). Keep in sync with backend app/brand.py. */
+export const PROJECT_COLORS = ['#282b66', '#e96831', '#4f5394', '#b44515', '#7a7db3', '#f2925f', '#14163f', '#5b5d73']
 
 /** One line of "who worked on what": person, note, task (opens the drawer), project and day. */
 export function UpdateLine({ u, showProject = true, showDay = true }: { u: UpdateEntry; showProject?: boolean; showDay?: boolean }) {
@@ -46,7 +47,7 @@ export function ProjectCard({ p }: { p: ProjectSummary }) {
     <article className="project-card">
       <header>
         <Link to={`/projects/${p.id}`} className="pc-name">
-          <i style={{ background: p.color }} aria-hidden="true" />
+          <i className="pcolor" style={{ '--pc': p.color } as CSSProperties} aria-hidden="true" />
           {p.name}
         </Link>
         {p.last_activity ? <span className="pc-when">{fmtDayLong(p.last_activity)}</span> : null}
@@ -66,7 +67,7 @@ export function ProjectCard({ p }: { p: ProjectSummary }) {
         </span>
       </div>
       <div className="track pc-track" aria-label={`${Math.round(donePct)}% of tasks done`}>
-        {donePct > 0 ? <i style={{ width: `${donePct}%`, background: p.color }} /> : null}
+        {donePct > 0 ? <i className="pcolor" style={{ width: `${donePct}%`, '--pc': p.color } as CSSProperties} /> : null}
       </div>
 
       {p.members.length && !p.last_activity ? (

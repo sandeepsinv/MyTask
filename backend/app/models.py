@@ -12,6 +12,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from .brand import NAVY
 from .database import Base
 
 
@@ -30,7 +31,7 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(20), default="member")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    avatar_color: Mapped[str] = mapped_column(String(20), default="#4f46e5")
+    avatar_color: Mapped[str] = mapped_column(String(20), default=NAVY)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
@@ -45,7 +46,7 @@ class Project(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(Text, default="")
-    color: Mapped[str] = mapped_column(String(20), default="#1b6e66")
+    color: Mapped[str] = mapped_column(String(20), default=NAVY)
     status: Mapped[str] = mapped_column(String(20), default="active", index=True)  # active | archived
     created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

@@ -18,7 +18,7 @@ const PARTS: { key: keyof ScoreBreakdown; label: string; color: string }[] = [
   { key: 'on_time', label: 'On time', color: 'color-mix(in srgb, var(--accent) 65%, var(--ground))' },
   { key: 'updates', label: 'Daily updates', color: 'color-mix(in srgb, var(--accent) 40%, var(--ground))' },
   { key: 'streak', label: 'Streak', color: 'color-mix(in srgb, var(--accent) 22%, var(--ground))' },
-  { key: 'achievements', label: 'Achievements', color: 'var(--text)' },
+  { key: 'achievements', label: 'Achievements', color: 'var(--brand-orange)' },
 ]
 
 export default function Leaderboard() {

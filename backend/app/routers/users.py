@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import func, select
 
 from ..activity import AuditDep, diff
+from ..brand import PALETTE
 from ..deps import DB, AdminUser, CurrentUser
 from ..models import User
 from ..schemas import PasswordReset, UserCreate, UserOut, UserPublic, UserUpdate
@@ -11,7 +12,7 @@ from ..security import hash_password
 
 router = APIRouter(tags=["users"])
 
-AVATAR_COLORS = ["#2563eb", "#0d9488", "#c2410c", "#4d7c0f", "#be123c", "#15803d", "#a16207", "#0369a1"]
+AVATAR_COLORS = PALETTE
 
 
 @router.get("/users", response_model=list[UserPublic])

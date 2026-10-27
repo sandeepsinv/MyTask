@@ -21,19 +21,19 @@ from scripts.create_admin import create_admin
 from app.services.achievements import evaluate_and_award
 
 PEOPLE = [
-    ("sara.haddad", "Sara Haddad", "Product lead", "#2563eb"),
-    ("omar.farouk", "Omar Farouk", "Backend engineer", "#c2410c"),
-    ("priya.nair", "Priya Nair", "Frontend engineer", "#0d9488"),
-    ("daniel.ortiz", "Daniel Ortiz", "Designer", "#be123c"),
-    ("lina.chen", "Lina Chen", "QA engineer", "#a16207"),
-    ("yusuf.kaya", "Yusuf Kaya", "DevOps engineer", "#4d7c0f"),
+    ("sara.haddad", "Sara Haddad", "Product lead", "#282b66"),
+    ("omar.farouk", "Omar Farouk", "Backend engineer", "#e96831"),
+    ("priya.nair", "Priya Nair", "Frontend engineer", "#4f5394"),
+    ("daniel.ortiz", "Daniel Ortiz", "Designer", "#b44515"),
+    ("lina.chen", "Lina Chen", "QA engineer", "#f2925f"),
+    ("yusuf.kaya", "Yusuf Kaya", "DevOps engineer", "#7a7db3"),
 ]
 
 PROJECTS = [
-    ("Billing v2", "Move invoicing and payments onto the provider's v2 API.", "#2563eb", "omar.farouk"),
-    ("Q4 release 2.3", "Everything that ships in the 2.3 release.", "#1b6e66", "sara.haddad"),
-    ("Platform reliability", "Staging cluster, backups and alerting.", "#4d7c0f", "yusuf.kaya"),
-    ("Hiring", "Frontend hire and interview loop.", "#be123c", "sara.haddad"),
+    ("Billing v2", "Move invoicing and payments onto the provider's v2 API.", "#282b66", "omar.farouk"),
+    ("Q4 release 2.3", "Everything that ships in the 2.3 release.", "#14163f", "sara.haddad"),
+    ("Platform reliability", "Staging cluster, backups and alerting.", "#7a7db3", "yusuf.kaya"),
+    ("Hiring", "Frontend hire and interview loop.", "#b44515", "sara.haddad"),
 ]
 
 # (title, project, priority, status, progress, pending, tags, [daily notes, newest last])

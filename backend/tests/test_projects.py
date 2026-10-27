@@ -12,7 +12,8 @@ def new_project(client, headers, name="Billing v2", **extra):
 
 def test_any_member_can_create_a_project(client, alice):
     _, headers = alice
-    p = new_project(client, headers, description="Move invoices to the new API", color="#2563eb")
+    p = new_project(client, headers, description="Move invoices to the new API", color="#E96831")
+    assert p["color"] == "#e96831"
     assert p["created_by"]["username"] == "alice"
     assert p["status"] == "active"
     assert p["total_tasks"] == 0
@@ -96,3 +97,10 @@ def test_delete_project_keeps_tasks_unmapped(client, alice):
     task = create_task(client, headers, project_id=p["id"])
     assert client.delete(f"/api/projects/{p['id']}", headers=headers).status_code == 204
     assert client.get(f"/api/tasks/{task['id']}", headers=headers).json()["project"] is None
+
+
+def test_only_brand_colours_allowed(client, alice):
+    _, headers = alice
+    assert client.post("/api/projects", json={"name": "Off brand", "color": "#00ff00"}, headers=headers).status_code == 422
+    p = new_project(client, headers, "On brand")
+    assert client.patch(f"/api/projects/{p['id']}", json={"color": "#123456"}, headers=headers).status_code == 422

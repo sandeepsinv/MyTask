@@ -28,7 +28,7 @@ def create_admin(db, username: str, password: str, full_name: str) -> User:
         full_name=full_name.strip() or username,
         role="admin",
         hashed_password=hash_password(password),
-        avatar_color="#1f2937",
+        avatar_color="#14163f",
     )
     db.add(user)
     db.commit()

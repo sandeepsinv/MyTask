@@ -10,7 +10,7 @@ export function BrandMark({ className = 'brand-mark' }: { className?: string }) 
   return (
     <svg className={className} viewBox="0 0 28 28" fill="none" aria-hidden="true">
       <circle cx="14" cy="14" r="13" stroke="currentColor" strokeWidth="1.6" />
-      <path d="M8.5 14.5l3.8 3.8L19.5 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path className="tick" d="M8.5 14.5l3.8 3.8L19.5 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   )
 }
@@ -49,7 +49,7 @@ export function AppShell() {
     <div className="app">
       <header className="topbar">
         <BrandMark />
-        <span className="where">{TITLES[location.pathname] ?? (location.pathname.startsWith('/projects/') ? 'Project' : 'MyTask')}</span>
+        <span className="where">{TITLES[location.pathname] ?? (location.pathname.startsWith('/projects/') ? 'Project' : 'PSITasky')}</span>
         <button className="icon-btn" onClick={() => setOpen((o) => !o)} aria-label={open ? 'Close menu' : 'Open menu'} aria-expanded={open}>
           {open ? <X /> : <Menu />}
         </button>
@@ -58,7 +58,7 @@ export function AppShell() {
       <nav className={`sidebar ${open ? 'open' : ''}`} aria-label="Main" onClick={(e) => (e.target as HTMLElement).closest('a') && setOpen(false)}>
         <div className="brand">
           <BrandMark />
-          <span className="brand-name">MyTask</span>
+          <span className="brand-name">PSITasky</span>
         </div>
         <div className="scope">Team workspace</div>
 

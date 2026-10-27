@@ -22,7 +22,7 @@ async def lifespan(_: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="MyTask — team task tracker", version="1.0.0", lifespan=lifespan)
+    app = FastAPI(title="PSITasky — team task tracker", version="1.0.0", lifespan=lifespan)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=get_settings().cors_origin_list,

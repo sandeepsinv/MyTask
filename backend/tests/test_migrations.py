@@ -48,5 +48,8 @@ def test_upgrade_converts_hour_logs_and_is_idempotent(tmp_path):
         (1, 1, "2026-10-21", "Worked on this"),
     ]
     assert keys == ["first_steps"]
+    with engine.connect() as conn:
+        avatar = conn.execute(text("SELECT avatar_color FROM users")).scalar_one()
+    assert avatar == "#282b66"  # old blue moved onto the brand navy
     assert title == ("Roadmap", None)
     engine.dispose()

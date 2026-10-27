@@ -118,7 +118,7 @@ export function ProjectChip({ project, plain }: { project: ProjectRef | null; pl
     )
   const inner = (
     <>
-      <i style={{ background: project.color }} aria-hidden="true" />
+      <i className="pcolor" style={{ '--pc': project.color } as CSSProperties} aria-hidden="true" />
       {project.name}
     </>
   )

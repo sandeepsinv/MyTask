@@ -3,6 +3,17 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
+from .brand import PALETTE
+
+
+def _brand_color(v: str | None) -> str | None:
+    if v is None:
+        return v
+    v = v.lower()
+    if v not in PALETTE:
+        raise ValueError("Pick one of the brand colours")
+    return v
+
 Role = Literal["admin", "member"]
 Status = Literal["todo", "in_progress", "blocked", "done"]
 Priority = Literal["low", "medium", "high", "critical"]
@@ -61,7 +72,9 @@ class UserUpdate(BaseModel):
     title: str | None = Field(default=None, max_length=120)
     role: Role | None = None
     is_active: bool | None = None
-    avatar_color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    avatar_color: str | None = None
+
+    _color = field_validator("avatar_color")(_brand_color)
 
 
 class PasswordReset(BaseModel):
@@ -79,14 +92,18 @@ class ProjectRef(ORM):
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
-    color: str = Field(default="#1b6e66", pattern=r"^#[0-9a-fA-F]{6}$")
+    color: str = PALETTE[0]
+
+    _color = field_validator("color")(_brand_color)
 
 
 class ProjectUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     description: str | None = None
-    color: str | None = Field(default=None, pattern=r"^#[0-9a-fA-F]{6}$")
+    color: str | None = None
     status: ProjectStatus | None = None
+
+    _color = field_validator("color")(_brand_color)
 
 
 # ---------- daily updates ----------

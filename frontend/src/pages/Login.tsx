@@ -41,7 +41,7 @@ export default function Login() {
       <aside className="login-side">
         <div className="brand" style={{ padding: 0 }}>
           <BrandMark />
-          <span className="brand-name">MyTask</span>
+          <span className="brand-name">PSITasky</span>
         </div>
         <p className="quote">
           Who's on what, and what's <em>stuck</em>.

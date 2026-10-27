@@ -1,5 +1,5 @@
 import { Archive, ArchiveRestore, Pencil, Plus, Trash2 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { errorMessage } from '../api/client'
 import { useDeleteProject, useProject, useUpdateProject } from '../api/hooks'
@@ -44,7 +44,7 @@ export default function ProjectDetail() {
       <div className="title-row">
         <div>
           <h1 style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <i className="title-swatch" style={{ background: p.color }} aria-hidden="true" />
+            <i className="title-swatch pcolor" style={{ '--pc': p.color } as CSSProperties} aria-hidden="true" />
             {p.name}
             {archived ? <span className="pill">Archived</span> : null}
           </h1>

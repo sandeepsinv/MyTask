@@ -6,6 +6,8 @@ Each step checks the live schema first, so running it again is a no-op.
 
 from sqlalchemy import Engine, inspect, text
 
+from .brand import to_brand
+
 # Achievements that were retired when hours tracking was removed.
 RETIRED_ACHIEVEMENTS = ("marathon", "centurion")
 
@@ -50,3 +52,12 @@ def upgrade(engine: Engine) -> None:
         if "user_achievements" in tables:
             for key in RETIRED_ACHIEVEMENTS:
                 conn.execute(text("DELETE FROM user_achievements WHERE achievement_key = :k"), {"k": key})
+
+        # 5. Rebrand: move project and avatar colours onto the logo's palette (no-op once they're on it).
+        for table, column in (("projects", "color"), ("users", "avatar_color")):
+            if table not in tables:
+                continue
+            for row_id, color in conn.execute(text(f"SELECT id, {column} FROM {table}")).all():
+                new = to_brand(color, row_id)
+                if new != color:
+                    conn.execute(text(f"UPDATE {table} SET {column} = :c WHERE id = :i"), {"c": new, "i": row_id})
